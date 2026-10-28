@@ -16,17 +16,45 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
+import android.os.Handler;
+import android.os.Looper;
+import java.util.UUID;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 public final class LoginActivity extends Activity {
     private static final int CREAM = 0xFFF5F2EC, PANEL = 0xFF191E18,
             FIELD = 0xFF11150F, ACCENT = 0xFFE8DDC5, MUTED = 0xFFBFC2B7;
-    private EditText username, pin;
+    private EditText username, password;
     private TextView status;
     private Button reveal;
-    private boolean pinVisible;
+    private boolean passwordVisible;
+    private Button signIn, verify, signOut;
+    private LinearLayout loginCard, accountCard;
+    private TextView accountStatus;
+    private AuthClient auth;
+    private AuthClient.Session session;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private Future<?> pending;
+    private int requestGeneration;
+    private boolean busy;
+    private final Runnable expire = () -> {
+        session = null;
+        accountCard.setVisibility(View.GONE);
+        loginCard.setVisibility(View.VISIBLE);
+        showStatus("Tu sesión venció. Inicia sesión de nuevo.");
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        android.content.SharedPreferences prefs = getSharedPreferences("installation", MODE_PRIVATE);
+        String deviceId = prefs.getString("id", null);
+        if (deviceId == null) {
+            deviceId = UUID.randomUUID().toString();
+            prefs.edit().putString("id", deviceId).apply();
+        }
+        auth = new AuthClient(BuildConfig.AUTH_BASE_URL, deviceId);
         if (!BuildConfig.DEBUG) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(CREAM);
@@ -68,6 +96,7 @@ public final class LoginActivity extends Activity {
         content.addView(divider, dividerParams);
 
         LinearLayout card = column();
+        loginCard = card;
         card.setPadding(dp(24), dp(26), dp(24), dp(26));
         card.setBackground(shape(PANEL, 28, 0xFF454A40));
         card.setElevation(dp(7));
@@ -81,23 +110,23 @@ public final class LoginActivity extends Activity {
         username.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         card.addView(username, new LinearLayout.LayoutParams(-1, dp(62)));
         addGap(card, 16);
-        LinearLayout pinRow = new LinearLayout(this);
-        pinRow.setGravity(Gravity.CENTER_VERTICAL);
-        pinRow.setBackground(shape(FIELD, 16, 0xFF3C4337));
-        pin = input("PIN de 4 dígitos", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        pin.setBackgroundColor(Color.TRANSPARENT);
-        pin.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
-        pin.setTransformationMethod(PasswordTransformationMethod.getInstance());
-        pin.setAutofillHints(View.AUTOFILL_HINT_PASSWORD);
-        pin.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
-        pin.setSaveEnabled(false);
-        pin.setOnEditorActionListener((v, action, event) -> {
+        LinearLayout passwordRow = new LinearLayout(this);
+        passwordRow.setGravity(Gravity.CENTER_VERTICAL);
+        passwordRow.setBackground(shape(FIELD, 16, 0xFF3C4337));
+        password = input("Contraseña", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        password.setBackgroundColor(Color.TRANSPARENT);
+        password.setFilters(new InputFilter[]{new InputFilter.LengthFilter(1024)});
+        password.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        password.setAutofillHints(View.AUTOFILL_HINT_PASSWORD);
+        password.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        password.setSaveEnabled(false);
+        password.setOnEditorActionListener((v, action, event) -> {
             if (action == EditorInfo.IME_ACTION_DONE) { submit(); return true; }
             return false;
         });
-        pinRow.addView(pin, new LinearLayout.LayoutParams(0, dp(62), 1));
+        passwordRow.addView(password, new LinearLayout.LayoutParams(0, dp(62), 1));
         reveal = new Button(this);
-        reveal.setText(R.string.show_pin);
+        reveal.setText(R.string.show_password);
         reveal.setTextColor(MUTED);
         reveal.setTextSize(12);
         reveal.setAllCaps(false);
@@ -105,12 +134,13 @@ public final class LoginActivity extends Activity {
         reveal.setMinWidth(0);
         reveal.setMinimumWidth(0);
         reveal.setBackground(ripple(FIELD, 16));
-        reveal.setContentDescription("Mostrar PIN");
-        reveal.setOnClickListener(v -> setPinVisible(!pinVisible));
-        pinRow.addView(reveal, new LinearLayout.LayoutParams(dp(60), dp(56)));
-        card.addView(pinRow);
+        reveal.setContentDescription("Mostrar contraseña");
+        reveal.setOnClickListener(v -> setPasswordVisible(!passwordVisible));
+        passwordRow.addView(reveal, new LinearLayout.LayoutParams(dp(60), dp(56)));
+        card.addView(passwordRow);
         addGap(card, 18);
         Button submit = new Button(this);
+        signIn = submit;
         submit.setText(R.string.sign_in);
         submit.setTextColor(FIELD);
         submit.setTextSize(18);
@@ -124,19 +154,103 @@ public final class LoginActivity extends Activity {
         status.setPadding(0, dp(16), 0, 0);
         status.setVisibility(View.GONE);
         card.addView(status);
+        accountCard = column();
+        accountCard.setPadding(dp(24), dp(26), dp(24), dp(26));
+        accountCard.setBackground(shape(PANEL, 28, 0xFF454A40));
+        accountCard.setVisibility(View.GONE);
+        accountCard.addView(text("Tu cuenta", 23, CREAM, true));
+        accountStatus = text("", 16, MUTED, false);
+        accountStatus.setPadding(0, dp(20), 0, dp(20));
+        accountStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        accountCard.addView(accountStatus);
+        verify = new Button(this);
+        verify.setText("Verificar sesión");
+        verify.setAllCaps(false);
+        verify.setOnClickListener(v -> verifySession());
+        accountCard.addView(verify, new LinearLayout.LayoutParams(-1, dp(56)));
+        signOut = new Button(this);
+        signOut.setText("Cerrar sesión");
+        signOut.setAllCaps(false);
+        signOut.setOnClickListener(v -> logout());
+        accountCard.addView(signOut, new LinearLayout.LayoutParams(-1, dp(56)));
+        content.addView(accountCard, new LinearLayout.LayoutParams(-1, -2));
         outer.setFocusableInTouchMode(true);
         setContentView(scroll);
     }
 
     private void submit() {
-        String error = LoginPolicy.validate(username.getText().toString(), pin.getText().toString());
+        if (busy) return;
+        String error = LoginPolicy.validate(username.getText().toString(), password.getText().toString());
         if (error != null) { showStatus(error); return; }
-        // Fail closed: no local success route or hardcoded credentials.
-        pin.getText().clear();
-        setPinVisible(false);
+        String userValue = username.getText().toString().trim();
+        String passwordValue = password.getText().toString();
+        password.getText().clear();
+        setPasswordVisible(false);
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
-                .hideSoftInputFromWindow(pin.getWindowToken(), 0);
-        showStatus("El servicio de acceso aún no está configurado. No se enviaron tus datos.");
+                .hideSoftInputFromWindow(password.getWindowToken(), 0);
+        showStatus("Comprobando acceso…");
+        runTask(() -> auth.login(userValue, passwordValue), result -> {
+            session = result;
+            loginCard.setVisibility(View.GONE);
+            accountCard.setVisibility(View.VISIBLE);
+            accountStatus.setText("Sesión validada para " + result.username + ".");
+            handler.removeCallbacks(expire);
+            handler.postDelayed(expire, Math.max(0, result.expiresAt - System.currentTimeMillis()));
+        }, this::showStatus);
+    }
+
+    private void verifySession() {
+        if (busy || session == null) return;
+        AuthClient.Session current = session;
+        accountStatus.setText("Verificando sesión…");
+        runTask(() -> { auth.check(current); return true; }, ok ->
+                accountStatus.setText("Sesión validada para " + current.username + "."), message -> {
+            session = null;
+            handler.removeCallbacks(expire);
+            accountCard.setVisibility(View.GONE);
+            loginCard.setVisibility(View.VISIBLE);
+            showStatus(message);
+        });
+    }
+
+    private void logout() {
+        if (busy || session == null) return;
+        AuthClient.Session current = session;
+        session = null;
+        handler.removeCallbacks(expire);
+        accountCard.setVisibility(View.GONE);
+        loginCard.setVisibility(View.VISIBLE);
+        showStatus("Cerrando sesión…");
+        runTask(() -> auth.logout(current), revoked -> showStatus(revoked ? "Sesión cerrada." :
+                "Sesión cerrada aquí y en nuestro servidor. SaoAuth no confirmó el cierre."),
+                message -> showStatus("Sesión eliminada del teléfono. No se confirmó el cierre remoto; vencerá en un máximo de 15 minutos."));
+    }
+
+    private <T> void runTask(Callable<T> task, Consumer<T> success, Consumer<String> failure) {
+        setBusy(true);
+        int generation = ++requestGeneration;
+        pending = executor.submit(() -> {
+            try {
+                T result = task.call();
+                handler.post(() -> {
+                    if (generation != requestGeneration || isFinishing() || isDestroyed()) return;
+                    setBusy(false); success.accept(result);
+                });
+            } catch (Exception e) {
+                String message = e instanceof AuthClient.AuthException ? e.getMessage() :
+                        "No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.";
+                handler.post(() -> {
+                    if (generation != requestGeneration || isFinishing() || isDestroyed()) return;
+                    setBusy(false); failure.accept(message);
+                });
+            }
+        });
+    }
+    private void setBusy(boolean value) {
+        busy = value;
+        signIn.setEnabled(!value); verify.setEnabled(!value); signOut.setEnabled(!value);
+        username.setEnabled(!value); password.setEnabled(!value);
+        signIn.setText(value ? "Conectando…" : getString(R.string.sign_in));
     }
 
     private void showStatus(String message) {
@@ -144,18 +258,32 @@ public final class LoginActivity extends Activity {
         status.setVisibility(View.VISIBLE);
     }
 
-    private void setPinVisible(boolean visible) {
-        pinVisible = visible;
-        pin.setTransformationMethod(visible ? null : PasswordTransformationMethod.getInstance());
-        pin.setSelection(pin.length());
+    private void setPasswordVisible(boolean visible) {
+        passwordVisible = visible;
+        password.setTransformationMethod(visible ? null : PasswordTransformationMethod.getInstance());
+        password.setSelection(password.length());
         reveal.setText(visible ? "Ocultar" : "Ver");
-        reveal.setContentDescription(visible ? "Ocultar PIN" : "Mostrar PIN");
+        reveal.setContentDescription(visible ? "Ocultar contraseña" : "Mostrar contraseña");
     }
 
     @Override protected void onStop() {
         super.onStop();
-        pin.getText().clear();
-        setPinVisible(false);
+        ++requestGeneration;
+        if (pending != null) pending.cancel(true);
+        setBusy(false);
+        password.getText().clear();
+        setPasswordVisible(false);
+    }
+    @Override protected void onStart() {
+        super.onStart();
+        if (session != null) verifySession();
+    }
+    @Override protected void onDestroy() {
+        ++requestGeneration;
+        executor.shutdownNow();
+        handler.removeCallbacksAndMessages(null);
+        session = null;
+        super.onDestroy();
     }
     private EditText input(String hint, int type) {
         EditText v = new EditText(this);

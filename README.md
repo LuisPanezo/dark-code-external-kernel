@@ -5,9 +5,11 @@ Diseño crema/negro con fénix, sin el pie «DARK CODE / 01».
 
 ## Estado
 
-Vista previa: formulario, validación, mostrar/ocultar PIN, teclado y mensajes accesibles.
-No hay servidor de autenticación conectado. Un formulario válido nunca concede acceso.
-No se almacena ni se envía el PIN. La aplicación no solicita root ni integra un driver.
+Vista previa 0.2.0: usuario y contraseña, mostrar/ocultar, validación, conexión HTTPS,
+pantalla de cuenta, verificación y cierre de sesión. Backend independiente en `backend/`.
+El backend aún no está desplegado y la APK de prueba no tiene URL configurada.
+Un formulario válido por sí solo nunca concede acceso. No se guarda la contraseña.
+La aplicación no solicita root ni integra un driver.
 
 ## Compilación
 
@@ -15,27 +17,26 @@ Requiere JDK 17+ y Android SDK 35. Definir ANDROID_HOME o un local.properties pr
 
 ```sh
 ./gradlew testDebugUnitTest lintDebug assembleDebug
+node --test backend/worker.test.mjs
 ```
 
 La APK debug es solo para pruebas. Release no tiene firma configurada.
-GitHub Actions prepara la comprobación; necesita publicarse en el repositorio elegido.
+Repositorio privado: https://github.com/LuisPanezo/darkcodeexternalkernel
+GitHub Actions comprueba Android y el backend.
 
 ## Autenticación pendiente
 
-Un PIN de cuatro dígitos tiene solo 10.000 combinaciones y no constituye por sí solo
-un login fuerte. Antes de producción, definir proveedor y política: preferir passkeys
-o credenciales robustas, y reservar el PIN para desbloqueo local de una sesión ya validada.
-Si el servidor admite PIN, requiere límites de intentos del lado servidor y evaluación
-de riesgos; los límites locales no protegen frente a un cliente modificado.
-
-El servidor debe verificar credenciales, emitir sesiones breves y revocables, aplicar
-autorización en cada recurso y permitir cierre de sesión. No incluir secretos de servidor
-en la APK. Guardar únicamente material de sesión necesario mediante Android Keystore.
-
-Disponibilidad pendiente: tiempos de espera, cancelación, mensajes de desconexión,
-reintento explícito y pruebas con servidor caído. Una caída nunca concede acceso.
+SaoAuth se conecta desde el backend, con secretos independientes de otros proyectos.
+La configuración, límites y pasos pendientes están en `backend/README.md`.
+La contraseña no se recorta ni se transforma; las políticas para crear contraseñas
+pertenecen al proveedor, no a la validación del formulario de acceso.
+Sesiones opacas de 15 minutos en memoria de la APK. No hay acceso offline ni renovación
+automática. La aplicación verifica de nuevo la sesión al volver del segundo plano.
+La API incorpora límites persistentes, revocación, timeout y respuestas sin caché.
+Falta desplegar con el secreto nuevo y probar con una cuenta real. Las pruebas locales
+simulan SaoAuth; no demuestran que el proveedor acepte esta configuración nueva.
 No se puede proteger una sesión contra todos los ataques en un dispositivo comprometido.
 
 Protecciones de esta base: backup desactivado, tráfico HTTP bloqueado por manifiesto,
-PIN no persistido y borrado al pasar a segundo plano; FLAG_SECURE en release.
+contraseña no persistida y borrada al pasar a segundo plano; FLAG_SECURE en release.
 Estas medidas no sustituyen autenticación ni una revisión de seguridad integral.

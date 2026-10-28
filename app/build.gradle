@@ -1,4 +1,8 @@
 plugins { id 'com.android.application' }
+def authUrl = providers.gradleProperty('authBaseUrl').getOrElse('')
+if (authUrl && !(authUrl ==~ /https:\/\/[A-Za-z0-9.-]+(?::443)?/)) {
+    throw new GradleException('authBaseUrl debe ser un origen HTTPS sin ruta ni credenciales.')
+}
 android {
     namespace 'com.darkcode.login'
     compileSdk 35
@@ -6,8 +10,9 @@ android {
         applicationId 'com.darkcode.login'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0-preview'
+        versionCode 2
+        versionName '0.2.0-preview'
+        buildConfigField 'String', 'AUTH_BASE_URL', '"' + authUrl + '"'
     }
     buildFeatures { buildConfig true }
     buildTypes {

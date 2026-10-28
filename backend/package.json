@@ -1,0 +1,6 @@
+{
+  "name": "darkcode-login-backend",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test worker.test.mjs" }
+}

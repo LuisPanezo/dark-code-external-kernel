@@ -7,3 +7,6 @@ local.properties
 .env*
 dist/
 .idea/
+.dev.vars*
+.wrangler/
+node_modules/
