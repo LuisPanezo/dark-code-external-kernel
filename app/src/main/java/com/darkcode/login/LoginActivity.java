@@ -174,6 +174,11 @@ public final class LoginActivity extends Activity {
         signOut.setOnClickListener(v -> logout());
         accountCard.addView(signOut, new LinearLayout.LayoutParams(-1, dp(56)));
         content.addView(accountCard, new LinearLayout.LayoutParams(-1, -2));
+        Button demo = com.darkcode.login.ui.Palette.button(this, "Explorar escena de prueba", false);
+        demo.setOnClickListener(v -> startActivity(new android.content.Intent(this, com.darkcode.login.ui.SceneActivity.class)));
+        LinearLayout.LayoutParams demoParams = new LinearLayout.LayoutParams(-1, dp(52));
+        demoParams.topMargin = dp(20);
+        content.addView(demo, demoParams);
         outer.setFocusableInTouchMode(true);
         setContentView(scroll);
     }
