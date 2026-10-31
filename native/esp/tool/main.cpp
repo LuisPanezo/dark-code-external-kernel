@@ -658,16 +658,11 @@ void DumpCapsule(IMemoryDriver& driver, uintptr_t world) {
     }
 }
 
-/* Escanea el SkeletalMesh del jugador local para localizar el array de
- * transformaciones de huesos (TArray<FTransform>) y el ComponentToWorld. */
-void DumpBones(IMemoryDriver& driver, uintptr_t world) {
-    PlayerChain chain;
-    if (!ReadPlayerChain(driver, world, chain)) {
-        std::printf("bones: cadena del jugador inválida\n");
-        return;
-    }
-    const uintptr_t mesh = ReadPtr(driver, chain.pawn + off::MESH);
-    std::printf("pawn %s  mesh(0x%lx) %s\n", Hex(chain.pawn).c_str(),
+/* Escanea el SkeletalMesh de un actor para localizar el array de huesos,
+ * el ComponentToWorld y la rotación (yaw) en la cápsula. */
+void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
+    const uintptr_t mesh = ReadPtr(driver, actor + off::MESH);
+    std::printf("actor %s  mesh(0x%lx) %s\n", Hex(actor).c_str(),
                 static_cast<unsigned long>(off::MESH), Hex(mesh).c_str());
     if (!PlausiblePointer(mesh)) {
         std::printf("bones: mesh inválido\n");
@@ -676,13 +671,13 @@ void DumpBones(IMemoryDriver& driver, uintptr_t world) {
 
     Vec3 pawn_pos{};
     {
-        const uintptr_t root = ReadPtr(driver, chain.pawn + off::ROOT_COMPONENT);
+        const uintptr_t root = ReadPtr(driver, actor + off::ROOT_COMPONENT);
         FEncVector raw{};
         if (root && Read(driver, root + off::REL_LOCATION, raw)) {
             pawn_pos = Vec3{raw.x, raw.y, raw.z};
         }
     }
-    std::printf("pawn pos: %.0f %.0f %.0f\n", pawn_pos.x, pawn_pos.y, pawn_pos.z);
+    std::printf("actor pos: %.0f %.0f %.0f\n", pawn_pos.x, pawn_pos.y, pawn_pos.z);
 
     std::vector<unsigned char> block(0x800);
     const size_t got = driver.read(mesh, block.data(), block.size());
@@ -718,6 +713,34 @@ void DumpBones(IMemoryDriver& driver, uintptr_t world) {
         if (driver.read(mesh + 0x138, f, sizeof(f)) == sizeof(f)) {
             std::printf("  rot=(%.3f %.3f %.3f %.3f) trans=(%.0f %.0f %.0f) scale=(%.3f %.3f %.3f)\n",
                         f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9]);
+        }
+    }
+
+    // Cápsula: ComponentToWorld (la rotación/yaw del personaje vive aquí).
+    {
+        const uintptr_t cap = ReadPtr(driver, actor + off::CAPSULE);
+        std::printf("capsule(0x%lx) %s\n", static_cast<unsigned long>(off::CAPSULE), Hex(cap).c_str());
+        if (PlausiblePointer(cap)) {
+            float f[10] = {0};
+            if (driver.read(cap + 0x138, f, sizeof(f)) == sizeof(f)) {
+                std::printf("  cap+0x138 rot=(%.3f %.3f %.3f %.3f) trans=(%.0f %.0f %.0f) scale=(%.3f %.3f %.3f)\n",
+                            f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9]);
+            }
+            // Buscar cuaterniones unitarios (|q|~1) en la cápsula.
+            std::vector<unsigned char> cb(0x400);
+            const size_t cgot = driver.read(cap, cb.data(), cb.size());
+            std::printf("  capsula: cuaterniones unitarios (|q|~1):\n");
+            for (size_t off = 0; off + 16 <= cgot; off += 4) {
+                float q[4] = {0};
+                std::memcpy(q, cb.data() + off, 16);
+                const float n = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+                if (n > 0.9f && n < 1.1f && (std::fabs(q[0]) > 0.01f || std::fabs(q[3]) > 0.01f)) {
+                    const float yaw = std::atan2(2.f * (q[3] * q[2] + q[0] * q[1]),
+                                                 1.f - 2.f * (q[1] * q[1] + q[2] * q[2])) * 57.2957795f;
+                    std::printf("    cap+0x%zx: q=(%.3f %.3f %.3f %.3f) yaw=%.1f°\n",
+                                off, q[0], q[1], q[2], q[3], yaw);
+                }
+            }
         }
     }
 
@@ -955,7 +978,16 @@ int main(int argc, char** argv) {
 
     if (g_mode == "bones") {
         std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
-        DumpBones(*raw_driver, reader.World());
+        dc::FrameSnapshot frame;
+        reader.ReadLatest(frame);   // poblar Targets()
+        // Escanear el primer objetivo con mesh válido (enemigos vivos).
+        uintptr_t target_actor = 0;
+        for (const Target& t : reader.Targets()) {
+            const uintptr_t m = ReadPtr(*raw_driver, t.actor + off::MESH);
+            if (PlausiblePointer(m)) { target_actor = t.actor; break; }
+        }
+        if (target_actor) DumpBones(*raw_driver, target_actor);
+        else std::printf("bones: sin objetivo con mesh válido\n");
         return 0;
     }
 

@@ -20,7 +20,8 @@ constexpr uintptr_t CAPSULE_HALF_HEIGHT = 0x160; // UCapsuleComponent::CapsuleHa
 constexpr uintptr_t BASE_EYE_HEIGHT = 0x37C;   // ACharacter::BaseEyeHeight (float, cm)
 
 /* ═══ Esqueleto: USkeletalMeshComponent ═══ */
-constexpr uintptr_t COMPONENT_TO_WORLD = 0x138; // USceneComponent::ComponentToWorld (FTransform)
+constexpr uintptr_t COMPONENT_TRANSLATION = 0x148; // ComponentToWorld.Translation (FVector)
+constexpr uintptr_t COMPONENT_ROTATION    = 0x1D0; // ComponentToWorld.Rotation (FQuat x,y,z,w)
 constexpr uintptr_t BONE_TRANSFORMS     = 0x760; // ComponentSpaceTransforms (TArray<FTransform>)
 
 /* Huesos principales (índices del esqueleto UE4 estándar), en orden para

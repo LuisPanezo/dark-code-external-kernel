@@ -258,11 +258,13 @@ static Vec3 RotateByQuat(const Vec3& v, float qx, float qy, float qz, float qw) 
 int ReadBones(IMemoryDriver& driver, uintptr_t mesh, Vec3* out) {
     if (!PlausiblePointer(mesh)) return 0;
 
-    // ComponentToWorld: Rotation(4) + Translation(3) + Scale(3) = 10 floats.
-    float ctw[10] = {0};
-    if (!Read(driver, mesh + off::COMPONENT_TO_WORLD, ctw)) return 0;
-    const float qx = ctw[0], qy = ctw[1], qz = ctw[2], qw = ctw[3];
-    const float tx = ctw[4], ty = ctw[5], tz = ctw[6];
+    // Rotación (FQuat) en mesh+0x1D0, traslación (FVector) en mesh+0x148.
+    float q[4] = {0};
+    if (!Read(driver, mesh + off::COMPONENT_ROTATION, q)) return 0;
+    const float qx = q[0], qy = q[1], qz = q[2], qw = q[3];
+    float t[3] = {0};
+    if (!Read(driver, mesh + off::COMPONENT_TRANSLATION, t)) return 0;
+    const float tx = t[0], ty = t[1], tz = t[2];
 
     // TArray<FTransform> en mesh+0x760: data (ptr), num (i32), max (i32).
     const uintptr_t data = ReadPtr(driver, mesh + off::BONE_TRANSFORMS);
