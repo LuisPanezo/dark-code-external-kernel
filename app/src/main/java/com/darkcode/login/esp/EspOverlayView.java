@@ -221,23 +221,39 @@ public final class EspOverlayView extends View {
         }
     }
 
+    /* Lee una preferencia booleana del panel (panel_options). */
+    private boolean pref(String key, boolean fallback) {
+        try {
+            return getContext().getSharedPreferences("panel_options", Context.MODE_PRIVATE)
+                    .getBoolean(key, fallback);
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (screenWidth <= 1 || screenHeight <= 1) return;
         final float anchorX = screenWidth * 0.5f;
         final float anchorY = anchorY();
+        final boolean showBox = pref("esp_box", true);
+        final boolean showHealth = pref("esp_health", true);
+        final boolean showName = pref("esp_name", true);
+        final boolean showDistance = pref("esp_distance", true);
         synchronized (lock) {
             for (Box box : boxes) {
-                drawLine(canvas, box, anchorX, anchorY);
-                drawBox(canvas, box);
-                drawText(canvas, box);
+                if (showBox) {
+                    drawLine(canvas, box, anchorX, anchorY);
+                    drawBox(canvas, box, showHealth);
+                }
+                drawText(canvas, box, showName, showDistance, showHealth);
             }
         }
     }
 
     /* Caja con borde oscuro alrededor del objetivo, color según tipo. */
-    private void drawBox(Canvas canvas, Box box) {
+    private void drawBox(Canvas canvas, Box box, boolean showHealth) {
         final int color = colorOf(box);
         final float left = box.x;
         final float top = box.y;
@@ -255,7 +271,7 @@ public final class EspOverlayView extends View {
         canvas.drawRect(left, top, right, bottom, boxPaint);
 
         // Barra de vida (borde izquierdo), verde→amarillo→rojo según HP.
-        if (box.hp >= 0f) {
+        if (showHealth && box.hp >= 0f) {
             final float frac = Math.max(0f, Math.min(1f, box.hp / 100f));
             final int hpColor = frac > 0.5f ? 0xFF00E878
                     : (frac > 0.25f ? 0xFFFFC400 : 0xFFFF4D4D);
@@ -295,21 +311,24 @@ public final class EspOverlayView extends View {
         }
     }
 
-    /* Nombre arriba, "distancia + vida" abajo. */
-    private void drawText(Canvas canvas, Box box) {
+    /* Nombre arriba, "distancia + vida" abajo (según toggles). */
+    private void drawText(Canvas canvas, Box box, boolean showName, boolean showDistance, boolean showHealth) {
         final int color = colorOf(box);
         final float cx = box.x + box.w * 0.5f;
         final float size = Math.max(9f, Math.min(18f, box.h * 0.28f));
 
-        if (!box.name.isEmpty()) {
+        if (showName && !box.name.isEmpty()) {
             drawText(canvas, box.name, cx, box.y - size * 0.4f, color, size);
         }
         StringBuilder info = new StringBuilder();
-        info.append(String.format(Locale.US, "%.0fm", box.dist));
-        if (box.hp > 0f) {
-            info.append("  ").append((int) box.hp).append("hp");
+        if (showDistance) info.append(String.format(Locale.US, "%.0fm", box.dist));
+        if (showHealth && box.hp > 0f) {
+            if (info.length() > 0) info.append("  ");
+            info.append((int) box.hp).append("hp");
         }
-        drawText(canvas, info.toString(), cx, box.y + box.h + size * 1.1f, color, size);
+        if (info.length() > 0) {
+            drawText(canvas, info.toString(), cx, box.y + box.h + size * 1.1f, color, size);
+        }
     }
 
     private void drawText(Canvas canvas, String text, float cx, float y,

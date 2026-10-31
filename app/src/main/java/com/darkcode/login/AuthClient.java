@@ -47,7 +47,7 @@ final class AuthClient {
     }
     boolean logout(Session session) throws Exception {
         return request("/v1/logout", new JSONObject().put("device_id", deviceId), session.token)
-                .optBoolean("upstream_revoked", false);
+                .optBoolean("success", false);
     }
     private JSONObject request(String path, JSONObject body, String token) throws Exception {
         if (baseUrl.isEmpty()) throw new AuthException("El servicio de acceso aún no está configurado. No se enviaron tus datos.");
@@ -69,10 +69,26 @@ final class AuthClient {
             try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
             finally { java.util.Arrays.fill(bytes, (byte) 0); }
             int code = connection.getResponseCode();
-            if (code == 401 || code == 403) throw new AuthException("Acceso rechazado. Comprueba tus datos o vuelve a iniciar sesión.");
+            String reason = "";
+            if (code != 200) {
+                try { reason = readResponse(connection.getErrorStream()).optString("error", ""); }
+                catch (Exception ignored) { /* Only display our known messages, never raw server text. */ }
+            }
+            if (reason.equals("device_mismatch")) throw new AuthException("Esta cuenta está vinculada a otra instalación. Contacta con soporte para revisar el dispositivo.");
+            if (reason.equals("subscription_expired")) throw new AuthException("Tu suscripción venció. Contacta con soporte para renovarla.");
+            if (reason.equals("not_configured")) throw new AuthException("El servicio de acceso necesita revisar su configuración. Contacta con soporte.");
+            if (code == 401 || code == 403) throw new AuthException(path.equals("/v1/login")
+                    ? "Acceso rechazado. Revisa usuario, contraseña y vigencia de la cuenta."
+                    : "Tu sesión venció o fue cerrada. Inicia sesión de nuevo.");
             if (code == 429) throw new AuthException("Demasiados intentos. Espera un minuto antes de volver a intentar.");
+            if (code == 400 || code == 413) throw new AuthException("El servidor no aceptó el formato de la solicitud. Comprueba que usas la APK actualizada.");
             if (code != 200) throw new AuthException("El servicio no está disponible. Intenta más tarde.");
-            try (InputStream stream = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            return readResponse(connection.getInputStream());
+        } finally { connection.disconnect(); }
+    }
+    private JSONObject readResponse(InputStream response) throws Exception {
+            if (response == null) throw new AuthException("Respuesta del servidor vacía.");
+            try (InputStream stream = response; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[1024]; int count;
                 while ((count = stream.read(buffer)) != -1) {
                     if (output.size() + count > 16384) throw new AuthException("Respuesta del servidor inválida.");
@@ -80,6 +96,5 @@ final class AuthClient {
                 }
                 return new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
             }
-        } finally { connection.disconnect(); }
     }
 }

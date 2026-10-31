@@ -81,6 +81,10 @@ async function sao(path, data, env, upstream) {
         && !Object.values(payload).some(value => value === code);
       const reason = known.includes(code) || safeCode ? code : 'provider_rejected';
       console.warn('auth_provider_rejected', path, response.status, reason);
+      if (code === 'hwid_mismatch') throw new Failure('device_mismatch', 403);
+      if (code === 'subscription_expired') throw new Failure('subscription_expired', 403);
+      if (['invalid_application', 'invalid_secret', 'invalid_ownerid', 'unsupported_action', 'invalid_auth_type'].includes(code))
+        throw new Failure('not_configured', 503);
       throw new Failure('access_denied', 401);
     }
     return result;
@@ -118,7 +122,7 @@ export async function handle(request, env, upstream = fetch) {
       await rate(env, 'user:' + username.toLowerCase(), 5);
       const login = await sao('auth', {type: 'login', username, password: body.password,
         hwid: body.device_id}, env, upstream);
-      let upstreamToken = null, expiresAt = Date.now() + SESSION_MS;
+      let upstreamToken = null, subscription = null, expiresAt = Date.now() + SESSION_MS;
       if (login.session_token !== undefined) {
         if (typeof login.session_token !== 'string' || !login.session_token || login.session_token.length > 4096)
           throw new Failure('unavailable', 503);
@@ -131,16 +135,18 @@ export async function handle(request, env, upstream = fetch) {
         if (!info || info.username !== username || info.hwid !== body.device_id)
           throw new Failure('unavailable', 503);
         const expirySeconds = Number(info.expiry);
-        if (!Number.isFinite(expirySeconds) || expirySeconds <= 0)
+        if (!Number.isSafeInteger(expirySeconds) || expirySeconds <= 0 || !Number.isSafeInteger(expirySeconds * 1000))
           throw new Failure('unavailable', 503);
         expiresAt = Math.min(Date.now() + 5 * 60 * 1000, expirySeconds * 1000);
         if (expiresAt <= Date.now()) throw new Failure('access_denied', 401);
+        subscription = {expires_at: expirySeconds * 1000};
       }
       const sessionToken = token();
       await state(env, 'session:' + await hash(sessionToken), 'put', {
-        upstreamToken, deviceHash, username, expiresAt
+        upstreamToken, deviceHash, username, expiresAt, subscription
       });
-      return json({session_token: sessionToken, username, expires_at: expiresAt});
+      return json({session_token: sessionToken, username, expires_at: expiresAt,
+        ...(subscription ? {subscription} : {})});
     }
     const authorization = request.headers.get('Authorization') || '';
     if (!/^Bearer [a-f0-9]{64}$/.test(authorization)) throw new Failure('access_denied', 401);

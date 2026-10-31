@@ -1,5 +1,6 @@
 plugins { id 'com.android.application' }
 def authUrl = providers.gradleProperty('authBaseUrl').getOrElse('')
+def panelOnly = providers.gradleProperty('panelOnly').getOrElse('false').toBoolean()
 if (authUrl && !(authUrl ==~ /https:\/\/[A-Za-z0-9.-]+(?::443)?/)) {
     throw new GradleException('authBaseUrl debe ser un origen HTTPS sin ruta ni credenciales.')
 }
@@ -16,12 +17,15 @@ android {
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
         externalNativeBuild { cmake {
             cppFlags '-std=c++17'
-            arguments '-DDARKCODE_PANEL_ONLY=' + (providers.gradleProperty('panelOnly').getOrElse('false').toBoolean() ? 'ON' : 'OFF')
+            arguments '-DDARKCODE_PANEL_ONLY=' + (panelOnly ? 'ON' : 'OFF')
         } }
-        testInstrumentationRunner 'com.darkcode.login.PreviewRunner'
+        testInstrumentationRunner providers.gradleProperty('testRunner').getOrElse('com.darkcode.login.PreviewRunner')
         buildConfigField 'String', 'AUTH_BASE_URL', '"' + authUrl + '"'
+        buildConfigField 'boolean', 'PANEL_ONLY', panelOnly.toString()
+        manifestPlaceholders = [espEnabled: (!panelOnly).toString()]
     }
     buildFeatures { buildConfig true }
+    if (panelOnly) { sourceSets.main.assets.setSrcDirs(['src/panelOnly/assets']) }
     externalNativeBuild { cmake { path file('../native/CMakeLists.txt'); version '3.22.1' } }
     buildTypes {
         release {

@@ -16,7 +16,7 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-visible floating account and appearance panel; stopped through its close control or notification." />
         </service>
-        <service android:name=".esp.EspOverlayService" android:exported="false"
+        <service android:name=".esp.EspOverlayService" android:exported="false" android:enabled="${espEnabled}"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-visible ESP line overlay over other apps; stopped through its own notification." />

@@ -46,6 +46,19 @@ test('provider redirects are rejected without forwarding credentials', async () 
   assert.equal(calls, 1);
 });
 
+test('device binding errors stay distinct from credentials and server configuration errors', async () => {
+  for (const [upstreamError, status, error] of [
+    ['hwid_mismatch',403,'device_mismatch'],
+    ['subscription_expired',403,'subscription_expired'],
+    ['invalid_application',503,'not_configured'],
+    ['invalid_credentials',401,'access_denied']
+  ]) {
+    const response = await handle(req(), setup(), async()=>Response.json({success:false,error:upstreamError},{status:400}));
+    assert.equal(response.status,status);
+    assert.deepEqual(await response.json(),{error});
+  }
+});
+
 test('login requires provider acceptance AND session validation; no provider token/secret leaks', async () => {
   const calls = [];
   const upstream = async (url, options) => {
@@ -134,6 +147,7 @@ test('verified info creates a five-minute device-bound gateway session with loca
   assert.equal(response.status, 200);
   const login = await response.json();
   assert.ok(login.expires_at <= Date.now() + 300000);
+  assert.ok(login.subscription.expires_at > login.expires_at);
   assert.equal((await handle(req('/v1/session', {}, login.session_token), env, provider)).status, 200);
   assert.equal((await handle(req('/v1/session', {device_id:'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'}, login.session_token), env, provider)).status, 401);
   assert.equal((await handle(req('/v1/logout', {}, login.session_token), env, provider)).status, 200);
@@ -144,8 +158,22 @@ test('verified info creates a five-minute device-bound gateway session with loca
 test('missing, mismatched or expired provider info cannot create a gateway session', async () => {
   const valid = {username:'alice', hwid:device, expiry:Math.floor(Date.now()/1000)+3600};
   for (const info of [null, {...valid,username:'other'}, {...valid,hwid:'other'},
-      {...valid,expiry:undefined}, {...valid,expiry:'invalid'}, {...valid,expiry:1}]) {
+      {...valid,expiry:undefined}, {...valid,expiry:'invalid'}, {...valid,expiry:1},
+      {...valid,expiry:1e308}, {...valid,expiry:123.5}]) {
     const result = await handle(req(), setup(), async()=>Response.json({success:true,info}));
     assert.ok(result.status >= 400);
   }
+});
+
+test('gateway session expires after five minutes even when the subscription remains valid', async () => {
+  const env = setup(), now = Date.now;
+  const provider = async () => Response.json({success: true, info: {
+    username:'alice', hwid:device, expiry:Math.floor(now()/1000)+3600
+  }});
+  const login = await (await handle(req(), env, provider)).json();
+  try {
+    Date.now = () => now() + 301000;
+    const response = await handle(req('/v1/session', {}, login.session_token), env, provider);
+    assert.equal(response.status, 401);
+  } finally { Date.now = now; }
 });

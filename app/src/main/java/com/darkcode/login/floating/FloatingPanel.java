@@ -166,6 +166,10 @@ public final class FloatingPanel extends LinearLayout {
             dropdown.setContentDescription("Posición: "+positions[position]+". Abrir opciones");
             choices.setVisibility(GONE);
         });
+        espToggle(children,"ESP Box","esp_box",true);
+        espToggle(children,"Vida","esp_health",true);
+        espToggle(children,"Nombre","esp_name",true);
+        espToggle(children,"Distancia","esp_distance",true);
         children.setVisibility(option.isChecked()?VISIBLE:GONE);
         option.setOnCheckedChangeListener((button,checked)->{
             options.edit().putBoolean("op2",checked).apply();
@@ -179,9 +183,30 @@ public final class FloatingPanel extends LinearLayout {
     /* Enciende o apaga el overlay ESP (servicio en primer plano). El driver y la
      * lectura del juego los hace el proceso esp_df que lanza EspOverlayView. */
     private void setEspOverlay(boolean enabled) {
+        if(com.darkcode.login.BuildConfig.PANEL_ONLY) return;
         Intent intent = new Intent(getContext(), EspOverlayService.class);
         if (enabled) getContext().startForegroundService(intent);
         else getContext().stopService(intent);
+    }
+    /* Checkbox de opción del ESP: estilo del panel + persistencia en
+     * panel_options. Controla qué dibuja el overlay (caja/vida/nombre/distancia). */
+    private CheckBox espToggle(LinearLayout parent, String label, String key, boolean fallback) {
+        android.content.SharedPreferences options = getContext().getSharedPreferences("panel_options", Context.MODE_PRIVATE);
+        CheckBox cb = new CheckBox(getContext());
+        cb.setText(label);
+        cb.setTextColor(TEXT);
+        cb.setTextSize(13);
+        cb.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        cb.setMinHeight(dp(44));
+        cb.setButtonTintList(new ColorStateList(new int[][]{
+                new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{controlAccent(), MUTED}));
+        cb.setChecked(options.getBoolean(key, fallback));
+        cb.setOnCheckedChangeListener((b, checked) -> {
+            options.edit().putBoolean(key, checked).apply();
+            feedback(b);
+        });
+        parent.addView(cb, new LinearLayout.LayoutParams(-1, -2));
+        return cb;
     }
     private void colorSettings() {
         LinearLayout colors=card("COLOR");

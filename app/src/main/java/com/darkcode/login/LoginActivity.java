@@ -39,6 +39,7 @@ public final class LoginActivity extends Activity {
         AccountState.clear();
         continueAfterRoot = false;
         waitingOverlay = false;
+        waitingNotifications = false;
         stopService(new android.content.Intent(this, com.darkcode.login.floating.FloatingSceneService.class));
     }
     private final ExecutorService rootExecutor = Executors.newSingleThreadExecutor();
@@ -51,6 +52,9 @@ public final class LoginActivity extends Activity {
     private int requestGeneration;
     private boolean busy;
     private final Runnable expire = () -> {
+        ++requestGeneration;
+        if (pending != null) pending.cancel(true);
+        setBusy(false);
         cancelRootRequest();
         clearAccount();
         session = null;
@@ -206,6 +210,7 @@ public final class LoginActivity extends Activity {
             session = AccountState.session;
             loginCard.setVisibility(View.GONE);
             accountCard.setVisibility(View.VISIBLE);
+            accountStatus.setText("Sesión validada para " + session.username + ".");
             rootStatus.setText(AccountState.rootGranted ? "Acceso root concedido." : "Solicita acceso root para continuar.");
             handler.postDelayed(expire, Math.max(0, session.expiresAt - System.currentTimeMillis()));
         }
@@ -347,8 +352,8 @@ public final class LoginActivity extends Activity {
         loginCard.setVisibility(View.VISIBLE);
         showStatus("Cerrando sesión…");
         runTask(() -> auth.logout(current), revoked -> showStatus(revoked ? "Sesión cerrada." :
-                "Sesión cerrada aquí y en nuestro servidor. SaoAuth no confirmó el cierre."),
-                message -> showStatus("Sesión eliminada del teléfono. No se confirmó el cierre remoto; vencerá en un máximo de 15 minutos."));
+                "Sesión eliminada del teléfono. No se confirmó el cierre remoto."),
+                message -> showStatus("Sesión eliminada del teléfono. No se confirmó el cierre remoto; vencerá automáticamente."));
     }
 
     private <T> void runTask(Callable<T> task, Consumer<T> success, Consumer<String> failure) {
@@ -363,6 +368,8 @@ public final class LoginActivity extends Activity {
                 });
             } catch (Exception e) {
                 String message = e instanceof AuthClient.AuthException ? e.getMessage() :
+                        e instanceof java.net.SocketTimeoutException ? "La conexión tardó demasiado. Vuelve a intentarlo." :
+                        e instanceof org.json.JSONException ? "El servidor devolvió una respuesta inválida. Intenta más tarde." :
                         "No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.";
                 handler.post(() -> {
                     if (generation != requestGeneration || isFinishing() || isDestroyed()) return;
