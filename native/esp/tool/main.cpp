@@ -721,21 +721,19 @@ void DumpBones(IMemoryDriver& driver, uintptr_t world) {
         }
     }
 
-    // Primeros huesos (ComponentSpaceTransforms @ mesh+0x760), stride 40 y 48.
-    {
-        const uintptr_t bone_data = ReadPtr(driver, mesh + 0x760);
+    // Primeros huesos de AMBOS arrays (0x750 y 0x760), stride 48, trans en +16.
+    for (uintptr_t arr : {0x750u, 0x760u}) {
+        const uintptr_t bone_data = ReadPtr(driver, mesh + arr);
         int32_t bone_num = 0;
-        Read(driver, mesh + 0x768, bone_num);
-        std::printf("bones: data=%s num=%d (primeras 4 en stride 48, trans en +16)\n",
-                    Hex(bone_data).c_str(), bone_num);
-        std::vector<unsigned char> bb(48 * 4);
+        Read(driver, mesh + arr + 8, bone_num);
+        std::printf("bones @ mesh+0x%lx: data=%s num=%d (primeros 5, trans en +16)\n",
+                    static_cast<unsigned long>(arr), Hex(bone_data).c_str(), bone_num);
+        std::vector<unsigned char> bb(48 * 5);
         if (bone_data && driver.read(bone_data, bb.data(), bb.size()) == bb.size()) {
-            for (int i = 0; i < 4; ++i) {
-                float rot[4] = {0}, trans[3] = {0};
-                std::memcpy(rot, bb.data() + i * 48, 16);
+            for (int i = 0; i < 5; ++i) {
+                float trans[3] = {0};
                 std::memcpy(trans, bb.data() + i * 48 + 16, 12);
-                std::printf("  bone%d: rot=(%.2f %.2f %.2f %.2f) trans=(%.1f %.1f %.1f)\n",
-                            i, rot[0], rot[1], rot[2], rot[3], trans[0], trans[1], trans[2]);
+                std::printf("  bone%d: (%.1f %.1f %.1f)\n", i, trans[0], trans[1], trans[2]);
             }
         }
     }
@@ -904,7 +902,7 @@ int main(int argc, char** argv) {
                             targets[index].health,
                             targets[index].distance_m,
                             SanitizeName(targets[index].name).c_str());
-                // huesos proyectados: sx,sy;sx,sy;... (10º campo)
+                // huesos proyectados: sx:sy;sx:sy;... (10º campo, ':' para x/y)
                 for (int b = 0; b < targets[index].bone_count; ++b) {
                     const Vec3& bcm = targets[index].bones[b];
                     const dc::Vec3 canonical{bcm.y * 0.01f, bcm.z * 0.01f, -bcm.x * 0.01f};
@@ -913,7 +911,7 @@ int main(int argc, char** argv) {
                     const float sx = (0.5f + ndc.x * 0.5f) * g_screen_width;
                     const float sy = (0.5f - ndc.y * 0.5f) * g_screen_height;
                     if (b) std::printf(";");
-                    std::printf("%.1f,%.1f", sx, sy);
+                    std::printf("%.1f:%.1f", sx, sy);
                 }
                 ++count;
             }

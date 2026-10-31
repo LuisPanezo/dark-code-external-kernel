@@ -207,12 +207,12 @@ public final class EspOverlayView extends View {
                     box.hp = Float.parseFloat(f[6]);
                     box.dist = Float.parseFloat(f[7]);
                     box.name = f.length > 8 ? f[8] : "";
-                    // Huesos (10º campo): "x,y;x,y;..." coordenadas de pantalla.
+                    // Huesos (10º campo): "x:y;x:y;..." coordenadas de pantalla.
                     if (f.length > 9 && !f[9].isEmpty()) {
                         String[] pts = f[9].split(";");
                         int n = 0;
                         for (String p : pts) {
-                            String[] c = p.split(",");
+                            String[] c = p.split(":");
                             if (c.length < 2 || n + 2 > box.bones.length) break;
                             box.bones[n] = Float.parseFloat(c[0]);
                             box.bones[n + 1] = Float.parseFloat(c[1]);
