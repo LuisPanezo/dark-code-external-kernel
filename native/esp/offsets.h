@@ -27,9 +27,9 @@ constexpr uintptr_t BONE_TRANSFORMS     = 0x760; // ComponentSpaceTransforms (TA
 /* Huesos principales del esqueleto de Delta Force (77 huesos), en orden:
  * pelvis→columna→cuello→cabeza, brazos y piernas. Índices REALES del juego,
  * no los del maniquí estándar de UE4. */
-constexpr int kMainBoneIndex[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 11,
-                                  29, 30, 32, 57, 59, 60, 61, 63, 64, 65};
-constexpr int kMainBoneCount = 20;
+constexpr int kMainBoneIndex[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                                  29, 30, 31, 32, 57, 59, 60, 61, 63, 64, 65};
+constexpr int kMainBoneCount = 22;
 
 /* ═══ Posición: FVector de 16 bytes (3 floats + trailer de cifrado) ═══ */
 constexpr uintptr_t REL_LOCATION    = 0x168;   // USceneComponent::RelativeLocation

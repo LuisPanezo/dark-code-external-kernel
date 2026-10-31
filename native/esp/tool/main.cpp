@@ -782,13 +782,11 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor, uintptr_t ms, uintptr_t m
     // padre (RefBoneInfo → ParentIndex), que dan la jerarquía real de huesos.
     {
         std::printf("Assets SkeletalMesh (UObject) + RefBoneInfo (indices padre):\n");
-        std::vector<unsigned char> ablock(0x3000);
+        std::vector<unsigned char> ablock(0x4000);
         for (size_t off = 0; off + 8 <= got; off += 8) {
             uintptr_t ptr = 0;
             std::memcpy(&ptr, block.data() + off, 8);
             if (ptr < 0x600000000000ULL || ptr > 0x780000000000ULL) continue;
-            const uintptr_t vt = ReadPtr(driver, ptr);
-            if (vt < ms || vt >= me) continue;
             const size_t agot = driver.read(ptr, ablock.data(), ablock.size());
             // Buscar TArray<FMeshBoneInfo>: data+num+max, parent en +8 stride 12/16.
             bool found = false;
@@ -823,8 +821,8 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor, uintptr_t ms, uintptr_t m
                 if (found) break;
             }
             if (!found) {
-                std::printf("  mesh+0x%zx: asset=%s vtable=%s (sin RefBoneInfo)\n",
-                            off, Hex(ptr).c_str(), Hex(vt).c_str());
+                std::printf("  mesh+0x%zx: ptr=%s (sin RefBoneInfo)\n",
+                            off, Hex(ptr).c_str());
             }
         }
     }
@@ -1073,6 +1071,8 @@ int main(int argc, char** argv) {
         // Escanear el primer objetivo con mesh SkeletalMesh VÁLIDO (vtable en módulo).
         uintptr_t target_actor = 0;
         const uintptr_t ms = reader.Module().start, me = reader.Module().end;
+        std::printf("[*] módulo %s..%s (span=0x%zx)\n",
+                    Hex(ms).c_str(), Hex(me).c_str(), static_cast<size_t>(me - ms));
         for (const Target& t : reader.Targets()) {
             const uintptr_t m = ReadPtr(*raw_driver, t.actor + off::MESH);
             if (!PlausiblePointer(m)) continue;
