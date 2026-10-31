@@ -79,7 +79,9 @@ bool ReadTeamFallback(IMemoryDriver& driver, uintptr_t player_state, int32_t& ou
 float ReadEyeHeight(IMemoryDriver& driver, uintptr_t character, float fallback_cm);
 
 /* Lee los huesos principales del SkeletalMesh y los devuelve en mundo (cm).
- * `out` admite kMainBoneCount elementos; devuelve cuántos se rellenaron. */
-int ReadBones(IMemoryDriver& driver, uintptr_t mesh, uintptr_t capsule, Vec3* out);
+ * `feet_cm` es la posición REAL del actor (ya decodificada) que usa como
+ * traslación; `out` admite kMainBoneCount elementos. */
+int ReadBones(IMemoryDriver& driver, uintptr_t mesh, uintptr_t capsule,
+              const Vec3& feet_cm, Vec3* out);
 
 } // namespace dc::esp

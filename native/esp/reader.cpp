@@ -448,7 +448,8 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
 
         // Esqueleto: solo personajes cercanos (los lejanos son puntos diminutos).
         if (distance_m < 120.f && cached.mesh) {
-            target.bone_count = ReadBones(*driver_, cached.mesh, cached.capsule, target.bones);
+            target.bone_count = ReadBones(*driver_, cached.mesh, cached.capsule,
+                                          decoded.value, target.bones);
         }
 
         targets_.push_back(std::move(target));
