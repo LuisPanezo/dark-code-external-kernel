@@ -658,6 +658,89 @@ void DumpCapsule(IMemoryDriver& driver, uintptr_t world) {
     }
 }
 
+/* Escanea el SkeletalMesh del jugador local para localizar el array de
+ * transformaciones de huesos (TArray<FTransform>) y el ComponentToWorld. */
+void DumpBones(IMemoryDriver& driver, uintptr_t world) {
+    PlayerChain chain;
+    if (!ReadPlayerChain(driver, world, chain)) {
+        std::printf("bones: cadena del jugador inválida\n");
+        return;
+    }
+    const uintptr_t mesh = ReadPtr(driver, chain.pawn + off::MESH);
+    std::printf("pawn %s  mesh(0x%lx) %s\n", Hex(chain.pawn).c_str(),
+                static_cast<unsigned long>(off::MESH), Hex(mesh).c_str());
+    if (!PlausiblePointer(mesh)) {
+        std::printf("bones: mesh inválido\n");
+        return;
+    }
+
+    Vec3 pawn_pos{};
+    {
+        const uintptr_t root = ReadPtr(driver, chain.pawn + off::ROOT_COMPONENT);
+        FEncVector raw{};
+        if (root && Read(driver, root + off::REL_LOCATION, raw)) {
+            pawn_pos = Vec3{raw.x, raw.y, raw.z};
+        }
+    }
+    std::printf("pawn pos: %.0f %.0f %.0f\n", pawn_pos.x, pawn_pos.y, pawn_pos.z);
+
+    std::vector<unsigned char> block(0x800);
+    const size_t got = driver.read(mesh, block.data(), block.size());
+
+    std::printf("TArray<FTransform> candidatos (data+num+max):\n");
+    for (size_t off = 0; off + 16 <= got; off += 8) {
+        uintptr_t ptr = 0;
+        int32_t num = 0, max = 0;
+        std::memcpy(&ptr, block.data() + off, 8);
+        std::memcpy(&num, block.data() + off + 8, 4);
+        std::memcpy(&max, block.data() + off + 12, 4);
+        if (PlausiblePointer(ptr) && num >= 10 && num <= 400 && max >= num && max <= 2000) {
+            std::printf("  mesh+0x%zx: data=%s num=%d max=%d\n", off, Hex(ptr).c_str(), num, max);
+        }
+    }
+
+    std::printf("FVector cerca del pawn (ComponentToWorld):\n");
+    for (size_t off = 0; off + 12 <= got; off += 4) {
+        float x = 0.f, y = 0.f, z = 0.f;
+        std::memcpy(&x, block.data() + off, 4);
+        std::memcpy(&y, block.data() + off + 4, 4);
+        std::memcpy(&z, block.data() + off + 8, 4);
+        const float dx = x - pawn_pos.x, dy = y - pawn_pos.y, dz = z - pawn_pos.z;
+        if (dx * dx + dy * dy + dz * dz < 200.f * 200.f) {
+            std::printf("  mesh+0x%zx: (%.0f %.0f %.0f)\n", off, x, y, z);
+        }
+    }
+
+    // ComponentToWorld FTransform (Rotation 16B + Translation 12B + Scale 12B)
+    std::printf("ComponentToWorld @ mesh+0x138 (rot+trans+scale):\n");
+    {
+        float f[10] = {0};
+        if (driver.read(mesh + 0x138, f, sizeof(f)) == sizeof(f)) {
+            std::printf("  rot=(%.3f %.3f %.3f %.3f) trans=(%.0f %.0f %.0f) scale=(%.3f %.3f %.3f)\n",
+                        f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9]);
+        }
+    }
+
+    // Primeros huesos (ComponentSpaceTransforms @ mesh+0x760), stride 40 y 48.
+    {
+        const uintptr_t bone_data = ReadPtr(driver, mesh + 0x760);
+        int32_t bone_num = 0;
+        Read(driver, mesh + 0x768, bone_num);
+        std::printf("bones: data=%s num=%d (primeras 4 en stride 48, trans en +16)\n",
+                    Hex(bone_data).c_str(), bone_num);
+        std::vector<unsigned char> bb(48 * 4);
+        if (bone_data && driver.read(bone_data, bb.data(), bb.size()) == bb.size()) {
+            for (int i = 0; i < 4; ++i) {
+                float rot[4] = {0}, trans[3] = {0};
+                std::memcpy(rot, bb.data() + i * 48, 16);
+                std::memcpy(trans, bb.data() + i * 48 + 16, 12);
+                std::printf("  bone%d: rot=(%.2f %.2f %.2f %.2f) trans=(%.1f %.1f %.1f)\n",
+                            i, rot[0], rot[1], rot[2], rot[3], trans[0], trans[1], trans[2]);
+            }
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -673,7 +756,7 @@ int main(int argc, char** argv) {
 
         if (argument == "probe" || argument == "test" || argument == "loop" || argument == "chain" || argument == "camera" || argument == "names" || argument == "snapshot" ||
             argument == "pipe" || argument == "team" || argument == "dump" || argument == "scan" ||
-            argument == "teams" || argument == "capsule") {
+            argument == "teams" || argument == "capsule" || argument == "bones") {
             g_mode = argument;
         } else if (argument == "--package") {
             if (const char* value = next()) options.package = value;
@@ -797,19 +880,41 @@ int main(int argc, char** argv) {
             std::printf("B");
             int count = 0;
             const std::vector<Target>& targets = reader.Targets();
+
+            // Matriz de proyección (una por frame) para convertir huesos a pantalla.
+            const float aspect = g_screen_width / g_screen_height;
+            dc::CameraFrame view = frame.camera;
+            const float hfov = reader.HorizontalFovRadians();
+            if (hfov > 0.f) {
+                const float vfov = VerticalFovFromHorizontal(hfov, aspect);
+                if (vfov > 0.02f && vfov < 3.05f) view.vertical_fov_radians = vfov;
+            }
+            const dc::Mat4 matrix = dc::ViewProjection(view, aspect);
+
             for (size_t index = 0; index < frame.entities.size() && index < targets.size();
                  ++index) {
                 const ScreenBox box = ProjectEntity(frame, reader.HorizontalFovRadians(), index,
                                                     g_screen_width, g_screen_height);
                 if (!box.visible) continue;
-                // x,y,w,h,mate,team,hp,dist,nombre(sanitizado)
-                std::printf(" %.1f,%.1f,%.1f,%.1f,%d,%d,%.1f,%.1f,%s",
+                // x,y,w,h,mate,team,hp,dist,nombre(sanitizado),huesos
+                std::printf(" %.1f,%.1f,%.1f,%.1f,%d,%d,%.1f,%.1f,%s,",
                             box.x, box.y, box.w, box.h,
                             targets[index].teammate ? 1 : 0,
                             targets[index].team,
                             targets[index].health,
                             targets[index].distance_m,
                             SanitizeName(targets[index].name).c_str());
+                // huesos proyectados: sx,sy;sx,sy;... (10º campo)
+                for (int b = 0; b < targets[index].bone_count; ++b) {
+                    const Vec3& bcm = targets[index].bones[b];
+                    const dc::Vec3 canonical{bcm.y * 0.01f, bcm.z * 0.01f, -bcm.x * 0.01f};
+                    dc::Vec3 ndc{};
+                    if (!dc::ProjectPoint(matrix, canonical, ndc)) continue;
+                    const float sx = (0.5f + ndc.x * 0.5f) * g_screen_width;
+                    const float sy = (0.5f - ndc.y * 0.5f) * g_screen_height;
+                    if (b) std::printf(";");
+                    std::printf("%.1f,%.1f", sx, sy);
+                }
                 ++count;
             }
             std::printf(" %d\n", count);
@@ -847,6 +952,12 @@ int main(int argc, char** argv) {
     if (g_mode == "capsule") {
         std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
         DumpCapsule(*raw_driver, reader.World());
+        return 0;
+    }
+
+    if (g_mode == "bones") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        DumpBones(*raw_driver, reader.World());
         return 0;
     }
 

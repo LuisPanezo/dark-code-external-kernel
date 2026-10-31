@@ -78,4 +78,8 @@ bool ReadTeamFallback(IMemoryDriver& driver, uintptr_t player_state, int32_t& ou
 /* ACharacter::BaseEyeHeight, con cordura; si no sirve, devuelve el respaldo. */
 float ReadEyeHeight(IMemoryDriver& driver, uintptr_t character, float fallback_cm);
 
+/* Lee los huesos principales del SkeletalMesh y los devuelve en mundo (cm).
+ * `out` admite kMainBoneCount elementos; devuelve cuántos se rellenaron. */
+int ReadBones(IMemoryDriver& driver, uintptr_t mesh, Vec3* out);
+
 } // namespace dc::esp

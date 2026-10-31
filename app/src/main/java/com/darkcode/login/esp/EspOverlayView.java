@@ -46,6 +46,8 @@ public final class EspOverlayView extends View {
         float hp;
         float dist;
         String name = "";
+        float[] bones = new float[40];  // 20 huesos × (x,y) en pantalla
+        int boneCount;
     }
 
     public EspOverlayView(Context context) {
@@ -205,6 +207,19 @@ public final class EspOverlayView extends View {
                     box.hp = Float.parseFloat(f[6]);
                     box.dist = Float.parseFloat(f[7]);
                     box.name = f.length > 8 ? f[8] : "";
+                    // Huesos (10º campo): "x,y;x,y;..." coordenadas de pantalla.
+                    if (f.length > 9 && !f[9].isEmpty()) {
+                        String[] pts = f[9].split(";");
+                        int n = 0;
+                        for (String p : pts) {
+                            String[] c = p.split(",");
+                            if (c.length < 2 || n + 2 > box.bones.length) break;
+                            box.bones[n] = Float.parseFloat(c[0]);
+                            box.bones[n + 1] = Float.parseFloat(c[1]);
+                            n += 2;
+                        }
+                        box.boneCount = n / 2;
+                    }
                     boxes.add(box);
                 } catch (NumberFormatException ignored) {
                 }
@@ -241,14 +256,47 @@ public final class EspOverlayView extends View {
         final boolean showHealth = pref("esp_health", true);
         final boolean showName = pref("esp_name", true);
         final boolean showDistance = pref("esp_distance", true);
+        final boolean showBones = pref("esp_bones", true);
         synchronized (lock) {
             for (Box box : boxes) {
                 if (showBox) {
                     drawLine(canvas, box, anchorX, anchorY);
                     drawBox(canvas, box, showHealth);
                 }
+                if (showBones) drawSkeleton(canvas, box);
                 drawText(canvas, box, showName, showDistance, showHealth);
             }
+        }
+    }
+
+    /* Conexiones del esqueleto: pares de índices en el array de 20 huesos. */
+    private static final int[][] BONE_LINKS = {
+        {0,1},{1,2},{2,3},{3,4},{4,5},    // pelvis→columna→cuello→cabeza
+        {3,6},{6,7},{7,8},{8,9},          // columna→brazo izq
+        {3,10},{10,11},{11,12},{12,13},   // columna→brazo der
+        {0,14},{14,15},{15,16},           // pelvis→pierna izq
+        {0,17},{17,18},{18,19}            // pelvis→pierna der
+    };
+
+    /* Esqueleto: líneas hueso-a-hueso con el color del objetivo. */
+    private void drawSkeleton(Canvas canvas, Box box) {
+        if (box.boneCount < 2) return;
+        final int color = colorOf(box);
+        darkPaint.setColor(0xFF000000);
+        darkPaint.setAlpha(130);
+        darkPaint.setStrokeWidth(3f);
+        linePaint.setColor(color);
+        linePaint.setAlpha(210);
+        linePaint.setStrokeWidth(1.5f);
+        for (int[] link : BONE_LINKS) {
+            final int a = link[0] * 2, b = link[1] * 2;
+            if (a + 1 >= box.boneCount * 2 || b + 1 >= box.boneCount * 2) continue;
+            final float x0 = box.bones[a], y0 = box.bones[a + 1];
+            final float x1 = box.bones[b], y1 = box.bones[b + 1];
+            if (x0 <= 0f && y0 <= 0f) continue;
+            if (x1 <= 0f && y1 <= 0f) continue;
+            canvas.drawLine(x0, y0, x1, y1, darkPaint);
+            canvas.drawLine(x0, y0, x1, y1, linePaint);
         }
     }
 

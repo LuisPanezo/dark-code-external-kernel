@@ -84,6 +84,8 @@ struct Target {
     bool        encrypted{};
     bool        teammate{};
     std::string name;
+    Vec3        bones[20]{};   // huesos principales (mundo, cm), kMainBoneIndex
+    int         bone_count{0}; // cuántos huesos válidos
 };
 
 struct Stats {

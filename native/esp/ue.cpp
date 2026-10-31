@@ -242,4 +242,50 @@ float ReadEyeHeight(IMemoryDriver& driver, uintptr_t character, float fallback_c
     return value;
 }
 
+/* Aplica un cuaternión unitario a un vector: v' = q * v * q^-1. */
+static Vec3 RotateByQuat(const Vec3& v, float qx, float qy, float qz, float qw) {
+    const float tx = 2.f * (qy * v.z - qz * v.y);
+    const float ty = 2.f * (qz * v.x - qx * v.z);
+    const float tz = 2.f * (qx * v.y - qy * v.x);
+    return Vec3{
+        v.x + qw * tx + (qy * tz - qz * ty),
+        v.y + qw * ty + (qz * tx - qx * tz),
+        v.z + qw * tz + (qx * ty - qy * tx),
+    };
+}
+
+/* Lee los huesos principales (kMainBoneIndex) en mundo, en cm. */
+int ReadBones(IMemoryDriver& driver, uintptr_t mesh, Vec3* out) {
+    if (!PlausiblePointer(mesh)) return 0;
+
+    // ComponentToWorld: Rotation(4) + Translation(3) + Scale(3) = 10 floats.
+    float ctw[10] = {0};
+    if (!Read(driver, mesh + off::COMPONENT_TO_WORLD, ctw)) return 0;
+    const float qx = ctw[0], qy = ctw[1], qz = ctw[2], qw = ctw[3];
+    const float tx = ctw[4], ty = ctw[5], tz = ctw[6];
+
+    // TArray<FTransform> en mesh+0x760: data (ptr), num (i32), max (i32).
+    const uintptr_t data = ReadPtr(driver, mesh + off::BONE_TRANSFORMS);
+    int32_t num = 0;
+    if (!Read(driver, mesh + off::BONE_TRANSFORMS + 8, num)) return 0;
+    if (!PlausiblePointer(data) || num <= 0 || num > 400) return 0;
+
+    // Leer todo el array de una vez (stride 48, trans en +16 = floats[4..6]).
+    std::vector<unsigned char> buf(static_cast<size_t>(num) * 48);
+    if (driver.read(data, buf.data(), buf.size()) != buf.size()) return 0;
+
+    int count = 0;
+    for (int i = 0; i < off::kMainBoneCount; ++i) {
+        const int bone = off::kMainBoneIndex[i];
+        if (bone >= num) continue;
+        const float* f = reinterpret_cast<const float*>(
+            buf.data() + static_cast<size_t>(bone) * 48);
+        const Vec3 local{f[4], f[5], f[6]};
+        const Vec3 world = RotateByQuat(local, qx, qy, qz, qw);
+        out[count] = Vec3{world.x + tx, world.y + ty, world.z + tz};
+        ++count;
+    }
+    return count;
+}
+
 } // namespace dc::esp

@@ -170,6 +170,7 @@ public final class FloatingPanel extends LinearLayout {
         espToggle(children,"Vida","esp_health",true);
         espToggle(children,"Nombre","esp_name",true);
         espToggle(children,"Distancia","esp_distance",true);
+        espToggle(children,"Bones","esp_bones",true);
         children.setVisibility(option.isChecked()?VISIBLE:GONE);
         option.setOnCheckedChangeListener((button,checked)->{
             options.edit().putBoolean("op2",checked).apply();
