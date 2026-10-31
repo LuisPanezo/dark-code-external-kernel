@@ -32,6 +32,17 @@ public final class LoginActivity extends Activity {
     private Button signIn, verify, signOut;
     private LinearLayout loginCard, accountCard;
     private TextView accountStatus;
+    private TextView rootStatus;
+    private Button openPanel, retryRoot;
+    private boolean resumed, waitingOverlay, continueAfterRoot, waitingNotifications;
+    private void clearAccount() {
+        AccountState.clear();
+        continueAfterRoot = false;
+        waitingOverlay = false;
+        stopService(new android.content.Intent(this, com.darkcode.login.floating.FloatingSceneService.class));
+    }
+    private final ExecutorService rootExecutor = Executors.newSingleThreadExecutor();
+    private Future<?> rootPending;
     private AuthClient auth;
     private AuthClient.Session session;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -40,6 +51,8 @@ public final class LoginActivity extends Activity {
     private int requestGeneration;
     private boolean busy;
     private final Runnable expire = () -> {
+        cancelRootRequest();
+        clearAccount();
         session = null;
         accountCard.setVisibility(View.GONE);
         loginCard.setVisibility(View.VISIBLE);
@@ -163,6 +176,19 @@ public final class LoginActivity extends Activity {
         accountStatus.setPadding(0, dp(20), 0, dp(20));
         accountStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         accountCard.addView(accountStatus);
+        rootStatus = text("", 14, MUTED, false);
+        rootStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        accountCard.addView(rootStatus);
+        retryRoot = new Button(this);
+        retryRoot.setText("Reintentar permiso root");
+        retryRoot.setAllCaps(false);
+        retryRoot.setOnClickListener(v -> { if (session != null && !busy) requestRoot(session); });
+        accountCard.addView(retryRoot, new LinearLayout.LayoutParams(-1, dp(52)));
+        openPanel = new Button(this);
+        openPanel.setText("Abrir mi panel flotante");
+        openPanel.setAllCaps(false);
+        openPanel.setOnClickListener(v -> openFloatingPanel());
+        accountCard.addView(openPanel, new LinearLayout.LayoutParams(-1, dp(56)));
         verify = new Button(this);
         verify.setText("Verificar sesión");
         verify.setAllCaps(false);
@@ -174,13 +200,15 @@ public final class LoginActivity extends Activity {
         signOut.setOnClickListener(v -> logout());
         accountCard.addView(signOut, new LinearLayout.LayoutParams(-1, dp(56)));
         content.addView(accountCard, new LinearLayout.LayoutParams(-1, -2));
-        Button demo = com.darkcode.login.ui.Palette.button(this, "Explorar escena de prueba", false);
-        demo.setOnClickListener(v -> startActivity(new android.content.Intent(this, com.darkcode.login.ui.SceneActivity.class)));
-        LinearLayout.LayoutParams demoParams = new LinearLayout.LayoutParams(-1, dp(52));
-        demoParams.topMargin = dp(20);
-        content.addView(demo, demoParams);
         outer.setFocusableInTouchMode(true);
         setContentView(scroll);
+        if (AccountState.authenticated()) {
+            session = AccountState.session;
+            loginCard.setVisibility(View.GONE);
+            accountCard.setVisibility(View.VISIBLE);
+            rootStatus.setText(AccountState.rootGranted ? "Acceso root concedido." : "Solicita acceso root para continuar.");
+            handler.postDelayed(expire, Math.max(0, session.expiresAt - System.currentTimeMillis()));
+        }
     }
 
     private void submit() {
@@ -196,12 +224,100 @@ public final class LoginActivity extends Activity {
         showStatus("Comprobando acceso…");
         runTask(() -> auth.login(userValue, passwordValue), result -> {
             session = result;
+            AccountState.session = result;
+            AccountState.rootGranted = false;
             loginCard.setVisibility(View.GONE);
             accountCard.setVisibility(View.VISIBLE);
             accountStatus.setText("Sesión validada para " + result.username + ".");
             handler.removeCallbacks(expire);
             handler.postDelayed(expire, Math.max(0, result.expiresAt - System.currentTimeMillis()));
+            requestRoot(result);
         }, this::showStatus);
+    }
+
+    private void requestRoot(AuthClient.Session current) {
+        cancelRootRequest();
+        if (current.expiresAt <= System.currentTimeMillis()) return;
+        retryRoot.setEnabled(false);
+        openPanel.setEnabled(false);
+        rootStatus.setText("Solicitando acceso root... Confirma en tu gestor de superusuario.");
+        rootPending = rootExecutor.submit(() -> {
+            try {
+                RootAccess.Result result = RootAccess.request();
+                handler.post(() -> {
+                    if (session == current && current.expiresAt > System.currentTimeMillis()
+                            && !isFinishing() && !isDestroyed()) {
+                        rootPending = null;
+                        rootStatus.setText(result.message);
+                        retryRoot.setEnabled(true);
+                        openPanel.setEnabled(true);
+                        AccountState.rootGranted = result.granted;
+                        continueAfterRoot = result.granted;
+                        if (resumed && continueAfterRoot) openFloatingPanel();
+                    }
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+    }
+
+    private void openFloatingPanel() {
+        if (!AccountState.canOpenPanel()) {
+            rootStatus.setText("Concede el permiso root para continuar.");
+            return;
+        }
+        continueAfterRoot = false;
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            waitingOverlay = true;
+            rootStatus.setText("Activa Mostrar sobre otras apps y vuelve para abrir tu panel.");
+            try {
+                startActivity(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:" + getPackageName())));
+            } catch (android.content.ActivityNotFoundException e) {
+                waitingOverlay = false;
+                rootStatus.setText("Activa Mostrar sobre otras apps desde los ajustes de Android.");
+            }
+            return;
+        }
+        waitingOverlay = false;
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            waitingNotifications = true;
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 14);
+            return;
+        }
+        startPanelService();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == 14 && waitingNotifications) {
+            waitingNotifications = false;
+            if (AccountState.canOpenPanel() && android.provider.Settings.canDrawOverlays(this)) startPanelService();
+        }
+    }
+
+    private void startPanelService() {
+        try {
+            startForegroundService(new android.content.Intent(this, com.darkcode.login.floating.FloatingSceneService.class));
+            rootStatus.setText("Panel abierto. Arrastra la cabecera para moverlo.");
+        } catch (RuntimeException e) {
+            rootStatus.setText("No se pudo abrir el panel. Vuelve a intentarlo.");
+        }
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (continueAfterRoot || (waitingOverlay && android.provider.Settings.canDrawOverlays(this)))
+            handler.post(() -> { if (resumed && AccountState.canOpenPanel()) openFloatingPanel(); });
+    }
+    @Override protected void onPause() { resumed = false; super.onPause(); }
+
+    private void cancelRootRequest() {
+        if (rootPending != null) rootPending.cancel(true);
+        rootPending = null;
     }
 
     private void verifySession() {
@@ -210,6 +326,8 @@ public final class LoginActivity extends Activity {
         accountStatus.setText("Verificando sesión…");
         runTask(() -> { auth.check(current); return true; }, ok ->
                 accountStatus.setText("Sesión validada para " + current.username + "."), message -> {
+            cancelRootRequest();
+            clearAccount();
             session = null;
             handler.removeCallbacks(expire);
             accountCard.setVisibility(View.GONE);
@@ -220,7 +338,9 @@ public final class LoginActivity extends Activity {
 
     private void logout() {
         if (busy || session == null) return;
+        cancelRootRequest();
         AuthClient.Session current = session;
+        clearAccount();
         session = null;
         handler.removeCallbacks(expire);
         accountCard.setVisibility(View.GONE);
@@ -284,6 +404,8 @@ public final class LoginActivity extends Activity {
         if (session != null) verifySession();
     }
     @Override protected void onDestroy() {
+        cancelRootRequest();
+        rootExecutor.shutdownNow();
         ++requestGeneration;
         executor.shutdownNow();
         handler.removeCallbacksAndMessages(null);

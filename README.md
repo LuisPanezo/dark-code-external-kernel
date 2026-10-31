@@ -10,13 +10,32 @@ Vista previa 0.3.0: usuario y contraseña, mostrar/ocultar, validación, conexi�
 pantalla de cuenta, verificación y cierre de sesión. Backend independiente en `backend/`.
 El backend aún no está desplegado y la APK de prueba no tiene URL configurada.
 Un formulario válido por sí solo nunca concede acceso. No se guarda la contraseña.
-La aplicación no solicita root ni integra un driver.
+Tras un login correcto, la app solicita root al gestor de superusuario instalado
+mediante `id -u` (timeout de 60 segundos), seguido del permiso Android para
+mostrarse sobre otras apps. El acceso root no instala ni integra un driver.
+Si root se deniega, la cuenta sigue abierta y permite reintentar; el panel requiere
+sesión vigente y consentimiento root. El gestor puede recordar la decisión.
 
-Incluye escena de prueba OpenGL ES, pestañas Escena/Ajustes/Estado y ventana flotante
-con arrastre, minimizar/restaurar y cerrar. Fuentes: Propio, Unity y Unreal simulados,
-más repetición local de muestra. Los adaptadores convierten valores de telemetría propia;
-no se conectan por sí solos a un motor. La simulación está accesible sin autenticación
-mediante «Explorar escena de prueba»; no es un bypass del login ni concede permisos de cuenta.
+El panel flotante utiliza controles Android nativos, no Dear ImGui. Tiene tema negro,
+cinco acentos y selector RGB, opacidad y tamaño de texto, respuesta táctil, perfil
+fijo inferior, soporte, arrastre, minimizar/restaurar y cierre desde notificación.
+La apariencia se guarda localmente. Los enlaces oficiales de soporte se configuran
+en `app/src/main/res/values/support.xml`; vacíos aparecen como «Próximamente».
+El perfil utiliza el usuario autenticado. El cliente acepta un objeto opcional
+`subscription: {name, expires_at}` con fecha en milisegundos Unix; el backend actual
+no lo proporciona, por lo que muestra «sin datos», sin inventar días de suscripción.
+La sesión de acceso de 15 minutos es independiente de la suscripción.
+La ventana se cierra al salir de la cuenta, invalidar o vencer la sesión.
+
+La escena de prueba OpenGL ES permanece en el código para pruebas de visualización,
+pero ya no se ofrece como entrada sin autenticación desde la pantalla de login.
+
+Como módulo aparte, y desactivado hasta que se conecte, está `native/esp`:
+lector del juego por `/dev/phmeop`, proyección a pantalla y API C `dc_esp_*`
+para un overlay propio (por ejemplo ImGui), más el interruptor desde Java.
+No dibuja nada por sí solo ni se activa al arrancar la app. Guía y pasos de
+conexión: [native/esp/README.md](native/esp/README.md). El driver vive en
+`kernel/` y se compila contra el kernel del dispositivo, no con Gradle.
 
 Contrato, convenciones, límites e integración de fuentes propias: [ARCHITECTURE.md](ARCHITECTURE.md).
 Capturas verificadas: [design/README.md](design/README.md).

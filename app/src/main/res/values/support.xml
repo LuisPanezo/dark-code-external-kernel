@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Add your official HTTPS links here. Empty links display as unavailable. -->
+    <string name="support_whatsapp_url" translatable="false"></string>
+    <string name="support_discord_url" translatable="false"></string>
+</resources>

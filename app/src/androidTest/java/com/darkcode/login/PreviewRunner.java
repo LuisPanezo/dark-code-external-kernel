@@ -83,23 +83,10 @@ public final class PreviewRunner extends Instrumentation {
             if(!panel.scene.latestStatus().equals("Pausado"))throw new AssertionError("Pause did not take effect");
             capture("06-state");
             runOnMainSync(()->panel.scene.setPaused(false));
-            // Permission must be granted by the test host before exercising the service.
-            boolean overlay=android.provider.Settings.canDrawOverlays(getTargetContext());
-            if(overlay) {
-                getTargetContext().startForegroundService(new Intent(getTargetContext(),FloatingSceneService.class));
-                for(int i=0;i<40&&!FloatingSceneService.running;++i)Thread.sleep(100);
-                if(!FloatingSceneService.running)throw new AssertionError("Floating window failed");
-                Thread.sleep(800);capture("07-floating");
-                getTargetContext().startService(new Intent(getTargetContext(),FloatingSceneService.class).setAction(FloatingSceneService.MINIMIZE));
-                Thread.sleep(300);if(!FloatingSceneService.minimized)throw new AssertionError("Minimize failed");
-                capture("08-minimized");
-                getTargetContext().startService(new Intent(getTargetContext(),FloatingSceneService.class).setAction(FloatingSceneService.EXPAND));
-                Thread.sleep(600);if(FloatingSceneService.minimized)throw new AssertionError("Restore failed");
-                capture("09-restored");
-                getTargetContext().stopService(new Intent(getTargetContext(),FloatingSceneService.class));
-                for(int i=0;i<30&&FloatingSceneService.running;++i)Thread.sleep(100);
-                if(FloatingSceneService.running)throw new AssertionError("Close failed");
-            }
+            // The floating account panel must reject starts without an authenticated account.
+            getTargetContext().startForegroundService(new Intent(getTargetContext(),FloatingSceneService.class));
+            Thread.sleep(500);
+            if(FloatingSceneService.running)throw new AssertionError("Unauthenticated overlay was allowed");
             runOnMainSync(()->demo.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
             Thread.sleep(1200);
             Activity landscape=resumedScene;
@@ -107,7 +94,7 @@ public final class PreviewRunner extends Instrumentation {
             if(landscape.getResources().getConfiguration().orientation!=android.content.res.Configuration.ORIENTATION_LANDSCAPE)
                 throw new AssertionError("Landscape configuration missing");
             runOnMainSync(()->landscape.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
-            result.putString("stream", nativeResult+". Login validation and four scene sources passed. Pause/resume and rotation passed. Floating checks: "+(overlay?"passed":"skipped: permission absent")+".\n");
+            result.putString("stream", nativeResult+". Login validation and four scene sources passed. Pause/resume and rotation passed. Floating checks: "+"unauthenticated start rejected"+".\n");
             finish(Activity.RESULT_OK, result);
         } catch (Exception | AssertionError e) {
             getTargetContext().stopService(new Intent(getTargetContext(),FloatingSceneService.class));

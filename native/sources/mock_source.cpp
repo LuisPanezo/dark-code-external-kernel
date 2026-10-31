@@ -1,7 +1,5 @@
 #include "mock_source.h"
-#include "adapters/unreal/unreal_adapter.h"
-#include "adapters/unity/unity_adapter.h"
-#include "adapters/custom/custom_adapter.h"
+#include "adapters/normalize.h"
 namespace dc {
 FrameSnapshot SampleScene(float seconds,Coordinates coordinates) {
     TelemetryFrame input;
@@ -19,9 +17,7 @@ FrameSnapshot SampleScene(float seconds,Coordinates coordinates) {
         e.half_extents={std::abs(s.x),std::abs(s.y),std::abs(s.z)};
     }
     input.timestamp_ns=MonotonicNs();FrameSnapshot out;
-    if(coordinates==Coordinates::UnityWorldMeters) UnityAdapter{}.Convert(input,out);
-    else if(coordinates==Coordinates::UnrealWorldCentimeters) UnrealAdapter{}.Convert(input,out);
-    else CustomAdapter{}.Convert(input,out);
+    Normalize(input,coordinates,out);
     return out;
 }
 Status MockSource::Start() {start_=MonotonicNs();sequence_=0;running_=true;return Status::Ok;}

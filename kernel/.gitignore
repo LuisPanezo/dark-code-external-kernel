@@ -1,0 +1,12 @@
+# Artefactos de compilación del módulo de kernel
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.order
+*.symvers
+Module.symvers
+modules.order
+.tmp_versions/
+.*.cmd

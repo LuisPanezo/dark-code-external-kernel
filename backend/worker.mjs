@@ -51,22 +51,42 @@ async function rate(env, key, max) {
 }
 async function sao(path, data, env, upstream) {
   try {
+    const payload = {...data, name: env.SAO_APP_NAME, ownerid: env.SAO_OWNERID,
+      secret: env.SAO_SECRET, version: env.SAO_VERSION || '1.0'};
     const response = await upstream('https://saoauth.com/api/client/' + path, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: JSON.stringify({...data, name: env.SAO_APP_NAME, ownerid: env.SAO_OWNERID,
-        secret: env.SAO_SECRET, version: env.SAO_VERSION || '1.0'})
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
+      headers: {'Content-Type': path === 'auth' ? 'application/x-www-form-urlencoded' : 'application/json', 'Accept': 'application/json'},
+      body: path === 'auth' ? new URLSearchParams(payload).toString() : JSON.stringify(payload)
     });
+    // Workers rejects redirect: 'error'. Never follow redirects with credentials.
+    if (response.status >= 300 && response.status < 400) throw new Failure('unavailable', 503);
     if (response.status === 429) throw new Failure('rate_limited', 429);
-    if (response.status >= 500) throw new Failure('unavailable', 503);
+    if (response.status >= 500) {
+      console.warn('auth_upstream_http', response.status);
+      throw new Failure('unavailable', 503);
+    }
     let result;
     try { result = await readJson(response, 65536); }
-    catch { throw new Failure('unavailable', 503); }
-    if (!response.ok || result.success !== true || result.authenticated === false)
+    catch {
+      console.warn('auth_upstream_invalid_json', response.status);
+      throw new Failure('unavailable', 503);
+    }
+    if (!response.ok || result.success !== true || result.authenticated === false) {
+      const known = ['invalid_application', 'invalid_secret', 'invalid_ownerid', 'invalid_version',
+        'invalid_credentials', 'invalid_password', 'user_not_found', 'invalid_user',
+        'subscription_expired', 'hwid_mismatch', 'invalid_session', 'invalid_auth_type',
+        'missing_fields', 'missing_credentials', 'invalid_type', 'login_disabled'];
+      const code = result.error || result.message;
+      const safeCode = typeof code === 'string' && /^[a-z][a-z_]{1,47}$/.test(code)
+        && !Object.values(payload).some(value => value === code);
+      const reason = known.includes(code) || safeCode ? code : 'provider_rejected';
+      console.warn('auth_provider_rejected', path, response.status, reason);
       throw new Failure('access_denied', 401);
+    }
     return result;
   } catch (e) {
     if (e instanceof Failure) throw e;
+    console.warn('auth_upstream_transport_failure');
     throw new Failure('unavailable', 503);
   }
 }
@@ -96,14 +116,29 @@ export async function handle(request, env, upstream = fetch) {
         throw new Failure('invalid_request', 400);
       const username = body.username.trim();
       await rate(env, 'user:' + username.toLowerCase(), 5);
-      const login = await sao('auth', {auth_type: 'user_login', username, password: body.password,
+      const login = await sao('auth', {type: 'login', username, password: body.password,
         hwid: body.device_id}, env, upstream);
-      if (typeof login.session_token !== 'string' || !login.session_token || login.session_token.length > 4096)
-        throw new Failure('unavailable', 503);
-      await sao('session/check', {session_token: login.session_token, hwid: body.device_id}, env, upstream);
-      const sessionToken = token(), expiresAt = Date.now() + SESSION_MS;
+      let upstreamToken = null, expiresAt = Date.now() + SESSION_MS;
+      if (login.session_token !== undefined) {
+        if (typeof login.session_token !== 'string' || !login.session_token || login.session_token.length > 4096)
+          throw new Failure('unavailable', 503);
+        upstreamToken = login.session_token;
+        await sao('session/check', {session_token: upstreamToken, hwid: body.device_id}, env, upstream);
+      } else {
+        // The current type=login API returns verified user info, without a provider token.
+        // Issue a short gateway session only for the exact authenticated user/device.
+        const info = login.info;
+        if (!info || info.username !== username || info.hwid !== body.device_id)
+          throw new Failure('unavailable', 503);
+        const expirySeconds = Number(info.expiry);
+        if (!Number.isFinite(expirySeconds) || expirySeconds <= 0)
+          throw new Failure('unavailable', 503);
+        expiresAt = Math.min(Date.now() + 5 * 60 * 1000, expirySeconds * 1000);
+        if (expiresAt <= Date.now()) throw new Failure('access_denied', 401);
+      }
+      const sessionToken = token();
       await state(env, 'session:' + await hash(sessionToken), 'put', {
-        upstreamToken: login.session_token, deviceHash, username, expiresAt
+        upstreamToken, deviceHash, username, expiresAt
       });
       return json({session_token: sessionToken, username, expires_at: expiresAt});
     }
@@ -115,15 +150,16 @@ export async function handle(request, env, upstream = fetch) {
       throw new Failure('access_denied', 401);
     if (path === '/v1/logout') {
       await state(env, key, 'delete'); // Local revocation is authoritative even if upstream is down.
-      let upstreamRevoked = true;
-      try { await sao('session/logout', {session_token: record.upstreamToken}, env, upstream); }
+      let upstreamRevoked = false;
+      try { if (record.upstreamToken) { await sao('session/logout', {session_token: record.upstreamToken}, env, upstream); upstreamRevoked = true; } }
       catch { upstreamRevoked = false; }
       return json({success: true, upstream_revoked: upstreamRevoked});
     }
-    try { await sao('session/check', {session_token: record.upstreamToken, hwid: body.device_id}, env, upstream); }
+    try { if (record.upstreamToken) await sao('session/check', {session_token: record.upstreamToken, hwid: body.device_id}, env, upstream); }
     catch (e) { if (e.status === 401) await state(env, key, 'delete'); throw e; }
     return json({success: true, username: record.username, expires_at: record.expiresAt});
   } catch (e) {
+    if (!(e instanceof Failure)) console.warn('auth_runtime_failure');
     return json({error: e instanceof Failure ? e.code : 'unavailable'}, e instanceof Failure ? e.status : 503);
   }
 }

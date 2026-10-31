@@ -1,7 +1,8 @@
 # Arquitectura de Dark Code 0.3.0
 
-Proyecto Android independiente. Esta versión visualiza una escena local de prueba;
-no incluye driver, kernel, acceso a memoria de otras aplicaciones ni offsets.
+Proyecto Android independiente. La APK visualiza una escena local de prueba; el
+módulo ESP (`native/esp`) y el driver (`kernel/`) viven en el repositorio pero no
+se activan solos: la app no abre `/dev/phmeop` hasta que se conecta el overlay.
 El login y su backend siguen siendo módulos separados de la visualización.
 
 ```text
@@ -30,12 +31,37 @@ Telemetría de aplicación propia → adapter Unity / Unreal / Custom → FrameS
 | `native/projection` | Matriz de vista/proyección y clipping homogéneo | Implementado |
 | `native/renderer` | Geometría y backend OpenGL ES 2 | Implementado |
 | `native/bridge` | Propiedad del engine y llamadas JNI | Implementado |
+| `native/esp` | Lector del juego vía driver, proyección y API `dc_esp_*` | Implementado; sin probar en dispositivo |
 | `backend` | Proxy de autenticación SaoAuth | Escrito, pendiente de despliegue/configuración |
 
-Los adaptadores NO se conectan a juegos ni proyectos Unity/Unreal por sí mismos.
-Reciben `TelemetryFrame` con valores exportados explícitamente por una aplicación propia.
+Las carpetas `native/adapters/unity`, `unreal` y `custom` están vacías:
+se retiraron sus clases adaptadoras. Git no conserva directorios vacíos.
+La normalización compartida permanece en `native/adapters/normalize.*` y la
+fuente simulada la invoca directamente. Los modos de muestra siguen disponibles.
+La normalización recibe `TelemetryFrame` con valores exportados explícitamente por una aplicación propia;
+no se conecta a juegos ni proyectos Unity/Unreal por sí misma.
 El SDK/emisor y el transporte de esa telemetría aún no están implementados.
 Los cuatro modos visibles utilizan datos locales de muestra, incluido el modo de repetición.
+
+## Módulo ESP (opcional, separado de la escena)
+
+`native/esp` lee el proceso del juego a través de `/dev/phmeop` y publica los
+mismos `FrameSnapshot` que consume el motor, así que no duplica proyección ni
+dibujo. Fronteras:
+
+- `driver.h` aísla el ioctl; `process_linux.cpp` sólo aporta `/proc`.
+- `ue.cpp` concentra lo dependiente de Unreal (rotador, FOV, `FEncVector`,
+  cadenas de actores). Nada específico del motor cruza hacia el renderer.
+- `EspReader` implementa `IFrameSource`: se puede enchufar a `FrameRuntime`
+  sin tocar el contrato existente.
+- `EspService` es el dueño único del driver (un cliente a la vez) y publica de
+  forma atómica; el hilo de dibujo nunca ejecuta ioctl.
+- `api/esp_api.h` es la superficie estable para el overlay y para JNI.
+
+El módulo no escribe memoria del juego: sólo lee. El escaneo de `GWorld`
+recorre los rangos RW de `libUE4.so` y los offsets están centralizados en
+`native/esp/offsets.h`. Detalles, límites y pasos de conexión:
+`native/esp/README.md`.
 
 ## Contrato de frame
 

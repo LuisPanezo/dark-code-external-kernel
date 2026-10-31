@@ -35,15 +35,31 @@ function req(path = '/v1/login', body = {}, token, ip = '192.0.2.1') {
 const ok = async url => Response.json(url.endsWith('/auth') ?
   {success: true, session_token: 'provider-token'} : {success: true});
 
+test('provider redirects are rejected without forwarding credentials', async () => {
+  let calls = 0;
+  const response = await handle(req(), setup(), async (url, options) => {
+    calls++;
+    assert.equal(options.redirect, 'manual');
+    return new Response(null, {status: 302, headers: {Location: 'https://other.example'}});
+  });
+  assert.equal(response.status, 503);
+  assert.equal(calls, 1);
+});
+
 test('login requires provider acceptance AND session validation; no provider token/secret leaks', async () => {
   const calls = [];
-  const upstream = async (url, options) => { calls.push(JSON.parse(options.body)); return ok(url); };
+  const upstream = async (url, options) => {
+    calls.push(url.endsWith('/auth') ? Object.fromEntries(new URLSearchParams(options.body)) : JSON.parse(options.body));
+    return ok(url);
+  };
   const response = await handle(req('/v1/login', {name: 'attacker', secret: 'attacker'}), setup(), upstream);
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.match(data.session_token, /^[a-f0-9]{64}$/);
   assert.equal(calls.length, 2);
   assert.equal(calls[0].name, 'Test app');
+  assert.equal(calls[0].type, 'login');
+  assert.equal(calls[0].auth_type, undefined);
   assert.equal(calls[0].password, ' pass🔐word ');
   assert.equal(calls[0].secret, 'test-secret');
   assert.ok(!JSON.stringify(data).includes('provider-token'));
@@ -106,4 +122,30 @@ test('missing configuration and oversized bodies never call provider', async () 
 test('passwords are not truncated; invalid input is rejected', async () => {
   for (const body of [{password: ''}, {password: 'x'.repeat(1025)}, {username: ''}, {device_id: '../bad'}])
     assert.equal((await handle(req('/v1/login', body), setup(), ok)).status, 400);
+});
+
+test('verified info creates a five-minute device-bound gateway session with local revocation', async () => {
+  const env = setup();
+  let calls = 0;
+  const provider = async () => { calls++; return Response.json({success: true, info: {
+    username: 'alice', hwid: device, expiry: String(Math.floor(Date.now()/1000)+3600)
+  }}); };
+  const response = await handle(req(), env, provider);
+  assert.equal(response.status, 200);
+  const login = await response.json();
+  assert.ok(login.expires_at <= Date.now() + 300000);
+  assert.equal((await handle(req('/v1/session', {}, login.session_token), env, provider)).status, 200);
+  assert.equal((await handle(req('/v1/session', {device_id:'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee'}, login.session_token), env, provider)).status, 401);
+  assert.equal((await handle(req('/v1/logout', {}, login.session_token), env, provider)).status, 200);
+  assert.equal((await handle(req('/v1/session', {}, login.session_token), env, provider)).status, 401);
+  assert.equal(calls, 1);
+});
+
+test('missing, mismatched or expired provider info cannot create a gateway session', async () => {
+  const valid = {username:'alice', hwid:device, expiry:Math.floor(Date.now()/1000)+3600};
+  for (const info of [null, {...valid,username:'other'}, {...valid,hwid:'other'},
+      {...valid,expiry:undefined}, {...valid,expiry:'invalid'}, {...valid,expiry:1}]) {
+    const result = await handle(req(), setup(), async()=>Response.json({success:true,info}));
+    assert.ok(result.status >= 400);
+  }
 });

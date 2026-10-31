@@ -16,6 +16,8 @@ final class AuthClient {
     static final class Session {
         final String token, username;
         final long expiresAt;
+        String plan = "Suscripción pendiente de sincronizar";
+        long subscriptionExpiresAt;
         Session(String token, String username, long expiresAt) {
             this.token = token; this.username = username; this.expiresAt = expiresAt;
         }
@@ -30,7 +32,13 @@ final class AuthClient {
         long expiry = data.getLong("expires_at");
         if (!token.matches("[a-f0-9]{64}") || expiry <= System.currentTimeMillis())
             throw new AuthException("El servidor devolvió una sesión inválida.");
-        return new Session(token, data.getString("username"), expiry);
+        Session session = new Session(token, data.getString("username"), expiry);
+        JSONObject subscription = data.optJSONObject("subscription");
+        if (subscription != null) {
+            session.plan = subscription.optString("name", "Suscripción");
+            session.subscriptionExpiresAt = subscription.optLong("expires_at", 0);
+        }
+        return session;
     }
     void check(Session session) throws Exception {
         if (session.expiresAt <= System.currentTimeMillis()) throw new AuthException("Tu sesión venció. Inicia sesión de nuevo.");

@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
-    <application android:label="Dark Code" android:theme="@style/AppTheme" android:icon="@drawable/phoenix"
+    <application android:name=".DarkCodeApplication" android:label="Dark Code" android:theme="@style/AppTheme" android:icon="@drawable/phoenix"
         android:allowBackup="false" android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false"
         android:supportsRtl="true">
@@ -14,7 +14,12 @@
         <service android:name=".floating.FloatingSceneService" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-started floating visualization of a local simulated scene; stopped through its close control or notification." />
+                android:value="User-visible floating account and appearance panel; stopped through its close control or notification." />
+        </service>
+        <service android:name=".esp.EspOverlayService" android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-visible ESP line overlay over other apps; stopped through its own notification." />
         </service>
         <activity android:name=".LoginActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">

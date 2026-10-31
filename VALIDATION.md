@@ -31,3 +31,26 @@ La inspección visual de capturas no sustituye pruebas exhaustivas en todos los 
 
 Capturas vigentes en `design/current/`. APK debug de entrega en
 `dist/DarkCode-0.3.0-scene-preview.apk` (ignorada por Git; CI publica su propia APK como artifact).
+
+## Módulo ESP (posterior a 0.3.0)
+
+Verificado en este equipo, con NDK 28.2.13676358:
+
+| Comprobación | Resultado |
+|---|---|
+| `esp_core` + `libdarkcode_scene.so` compilan, arm64-v8a | Compila |
+| `esp_core` + `libdarkcode_scene.so` compilan, x86_64 | Compila |
+| `esp_df` (herramienta de diagnóstico) en ambas ABI | Enlaza |
+| `esp_tests` (driver simulado) compila en ambas ABI | Compila |
+| `esp_tests` ejecutado | **Pendiente** de `ctest` en CI/Linux |
+| Probado en dispositivo | **No**: sin teléfono ni emulador disponibles |
+
+`esp_tests` no se pudo ejecutar aquí: no había dispositivo Android conectado y la
+virtualización del equipo está desactivada. Las comprobaciones numéricas de
+rotador, FOV, distancias y proyección se contrastaron aparte; el resto
+(escaneo de GWorld, lectura del escenario y caché) se valida en CI con
+`ctest --test-dir native-out`.
+
+El driver necesita recompilarse para `OP_MODULE_DATA_RANGE`; sin ese ioctl el
+cliente sigue funcionando como root leyendo `/proc/<pid>/maps`.
+
