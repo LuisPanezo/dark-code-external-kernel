@@ -252,23 +252,31 @@ public final class EspOverlayView extends View {
         }
     }
 
-    /* Caja con borde oscuro alrededor del objetivo, color según tipo. */
+    /* Caja redondeada con relleno translúcido, borde oscuro y color, según tipo. */
     private void drawBox(Canvas canvas, Box box, boolean showHealth) {
         final int color = colorOf(box);
         final float left = box.x;
         final float top = box.y;
         final float right = box.x + box.w;
         final float bottom = box.y + box.h;
+        final float radius = Math.max(2f, Math.min(6f, Math.min(box.w, box.h) * 0.22f));
 
+        // Relleno translúcido del color (muy sutil).
+        fillPaint.setColor(color);
+        fillPaint.setAlpha(26);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, fillPaint);
+
+        // Borde oscuro (outline) para contraste sobre cualquier fondo.
         boxDarkPaint.setColor(0xFF000000);
         boxDarkPaint.setAlpha(150);
         boxDarkPaint.setStrokeWidth(3f);
-        canvas.drawRect(left, top, right, bottom, boxDarkPaint);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, boxDarkPaint);
 
+        // Borde de color.
         boxPaint.setColor(color);
         boxPaint.setAlpha(235);
         boxPaint.setStrokeWidth(1.5f);
-        canvas.drawRect(left, top, right, bottom, boxPaint);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, boxPaint);
 
         // Barra de vida (borde izquierdo), verde→amarillo→rojo según HP.
         if (showHealth && box.hp >= 0f) {
@@ -285,12 +293,12 @@ public final class EspOverlayView extends View {
         }
     }
 
-    /* Línea con degradado + borde oscuro, color según tipo. */
+    /* Línea con degradado suave + borde oscuro, color según tipo. */
     private void drawLine(Canvas canvas, Box box, float ax, float ay) {
         final int color = colorOf(box);
         final float ox = box.x + box.w * 0.5f;
         final float oy = box.y + box.h * 0.5f;
-        final int segments = 12;
+        final int segments = 20;
         for (int i = 0; i < segments; i++) {
             final float f0 = i / (float) segments;
             final float f1 = (i + 1) / (float) segments;
@@ -335,9 +343,17 @@ public final class EspOverlayView extends View {
                           int color, float size) {
         textPaint.setTextSize(size);
         textPaint.setStrokeWidth(size * 0.12f);
+        // Sombra suave para despegarlo del fondo.
+        textPaint.setStyle(Paint.Style.FILL);
+        textPaint.setColor(0xE6000000);
+        textPaint.setShadowLayer(size * 0.2f, 0f, size * 0.1f, 0xFF000000);
+        canvas.drawText(text, cx, y, textPaint);
+        textPaint.clearShadowLayer();
+        // Borde oscuro.
         textPaint.setStyle(Paint.Style.STROKE);
         textPaint.setColor(0xFF000000);
         canvas.drawText(text, cx, y, textPaint);
+        // Relleno del color.
         textPaint.setStyle(Paint.Style.FILL);
         textPaint.setColor(color);
         canvas.drawText(text, cx, y, textPaint);

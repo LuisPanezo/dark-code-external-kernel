@@ -16,6 +16,7 @@ constexpr uintptr_t ACTORS           = 0x98;   // ULevel::Actors { Data, Num, Ma
 constexpr uintptr_t ROOT_COMPONENT  = 0x180;   // AActor::RootComponent
 constexpr uintptr_t MESH             = 0x3D0;   // ACharacter::Mesh
 constexpr uintptr_t CAPSULE          = 0x3E0;   // ACharacter::CapsuleComponent
+constexpr uintptr_t CAPSULE_HALF_HEIGHT = 0x160; // UCapsuleComponent::CapsuleHalfHeight (cm, 86 de pie)
 constexpr uintptr_t BASE_EYE_HEIGHT = 0x37C;   // ACharacter::BaseEyeHeight (float, cm)
 
 /* ═══ Posición: FVector de 16 bytes (3 floats + trailer de cifrado) ═══ */

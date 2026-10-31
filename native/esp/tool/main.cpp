@@ -631,6 +631,33 @@ void ScanTeams(IMemoryDriver& driver, uintptr_t world, int limit) {
     std::printf("teams: mostrados %d jugadores\n", shown);
 }
 
+/* Escanea la cápsula del jugador local buscando la media-altura (half-height),
+ * para que la caja se achique al agacharse/tumbarse. */
+void DumpCapsule(IMemoryDriver& driver, uintptr_t world) {
+    PlayerChain chain;
+    if (!ReadPlayerChain(driver, world, chain)) {
+        std::printf("capsule: cadena del jugador inválida\n");
+        return;
+    }
+    const uintptr_t capsule = ReadPtr(driver, chain.pawn + off::CAPSULE);
+    std::printf("pawn %s  capsule(0x%lx) %s\n", Hex(chain.pawn).c_str(),
+                static_cast<unsigned long>(off::CAPSULE), Hex(capsule).c_str());
+    if (!PlausiblePointer(capsule)) {
+        std::printf("capsule: puntero inválido\n");
+        return;
+    }
+    std::vector<unsigned char> block(0x400);
+    const size_t got = driver.read(capsule, block.data(), block.size());
+    std::printf("capsule floats 20..200 en +0x0..+0x400:\n");
+    for (size_t off = 0; off + 4 <= got; off += 4) {
+        float f = 0.f;
+        std::memcpy(&f, block.data() + off, 4);
+        if (f >= 20.f && f <= 200.f) {
+            std::printf("  cap+0x%zx = %.1f\n", off, f);
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -646,7 +673,7 @@ int main(int argc, char** argv) {
 
         if (argument == "probe" || argument == "test" || argument == "loop" || argument == "chain" || argument == "camera" || argument == "names" || argument == "snapshot" ||
             argument == "pipe" || argument == "team" || argument == "dump" || argument == "scan" ||
-            argument == "teams") {
+            argument == "teams" || argument == "capsule") {
             g_mode = argument;
         } else if (argument == "--package") {
             if (const char* value = next()) options.package = value;
@@ -814,6 +841,12 @@ int main(int argc, char** argv) {
     if (g_mode == "teams") {
         std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
         ScanTeams(*raw_driver, reader.World(), 80);
+        return 0;
+    }
+
+    if (g_mode == "capsule") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        DumpCapsule(*raw_driver, reader.World());
         return 0;
     }
 

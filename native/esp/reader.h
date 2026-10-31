@@ -59,8 +59,10 @@ private:
         uintptr_t   team_component{};
         uintptr_t   player_state{};
         uintptr_t   mesh{};
+        uintptr_t   capsule{};
         int32_t     team{-1};
         float       eye_cm{0.f};
+        float       half_height_cm{0.f};
         std::string name;
         int         ttl{0};
         uint64_t    last_tick{0};

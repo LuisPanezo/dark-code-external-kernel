@@ -15,8 +15,8 @@ namespace dc::esp {
 namespace {
 
 constexpr uint64_t kRescanNs = 2000000000ULL;   // 2 s entre reescaneos
-constexpr float    kMinHeightCm = 150.f;   // un personaje de pie mínimo
-constexpr float    kMaxHeightCm = 210.f;   // y máximo (humano/bot)
+constexpr float    kMinHeightCm = 40.f;    // mínimo (tumbado); el de pie es mayor
+constexpr float    kMaxHeightCm = 220.f;   // y máximo (humano/bot alto)
 constexpr float    kDegreesToRadians = 3.14159265358979323846f / 180.f;
 
 struct ActorsArray { uintptr_t data; uint32_t num; uint32_t max; };
@@ -201,6 +201,17 @@ void EspReader::RefreshActor(uintptr_t actor, CachedActor& cached) {
     }
 
     cached.eye_cm = ReadEyeHeight(*driver_, actor, options_.default_eye_cm);
+
+    // Cápsula → media-altura: refleja agachado/tumbado (86 cm de pie).
+    cached.capsule = ReadPtr(*driver_, actor + off::CAPSULE);
+    cached.half_height_cm = 0.f;
+    if (PlausiblePointer(cached.capsule)) {
+        float half = 0.f;
+        if (Read(*driver_, cached.capsule + off::CAPSULE_HALF_HEIGHT, half) &&
+            half >= 20.f && half <= 120.f) {
+            cached.half_height_cm = half;
+        }
+    }
 
     cached.name.clear();
     if (cached.player_state) ReadPlayerName(*driver_, cached.player_state, cached.name);
@@ -397,9 +408,15 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
             continue;
         }
 
-        const float eye_cm = cached.eye_cm > 0.f ? cached.eye_cm : options_.default_eye_cm;
-        const float height_cm = std::min(std::max(eye_cm + options_.eye_extra_cm, kMinHeightCm),
-                                         kMaxHeightCm);
+        // Altura por cápsula (agachado/tumbado); respaldo: eye_cm.
+        float height_cm;
+        if (cached.half_height_cm > 0.f) {
+            height_cm = cached.half_height_cm * 2.f;
+        } else {
+            const float eye_cm = cached.eye_cm > 0.f ? cached.eye_cm : options_.default_eye_cm;
+            height_cm = eye_cm + options_.eye_extra_cm;
+        }
+        height_cm = std::min(std::max(height_cm, kMinHeightCm), kMaxHeightCm);
 
         Target target;
         target.actor = actor;
