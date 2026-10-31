@@ -283,12 +283,13 @@ public final class EspOverlayView extends View {
     private void drawSkeleton(Canvas canvas, Box box) {
         if (box.boneCount < 2) return;
         final int color = colorOf(box);
+        // Líneas limpias: contorno oscuro fino + núcleo de color.
         darkPaint.setColor(0xFF000000);
-        darkPaint.setAlpha(150);
-        darkPaint.setStrokeWidth(4f);
+        darkPaint.setAlpha(175);
+        darkPaint.setStrokeWidth(2.8f);
         linePaint.setColor(color);
-        linePaint.setAlpha(235);
-        linePaint.setStrokeWidth(2f);
+        linePaint.setAlpha(245);
+        linePaint.setStrokeWidth(1.5f);
         for (int[] link : BONE_LINKS) {
             final int a = link[0] * 2, b = link[1] * 2;
             if (a + 1 >= box.boneCount * 2 || b + 1 >= box.boneCount * 2) continue;
@@ -299,14 +300,15 @@ public final class EspOverlayView extends View {
             canvas.drawLine(x0, y0, x1, y1, darkPaint);
             canvas.drawLine(x0, y0, x1, y1, linePaint);
         }
-        // Articulaciones: punto oscuro + núcleo de color en cada hueso.
-        fillPaint.setColor(color);
-        fillPaint.setAlpha(235);
-        for (int i = 0; i < box.boneCount; i++) {
-            final float x = box.bones[i * 2], y = box.bones[i * 2 + 1];
-            if (x <= 0f && y <= 0f) continue;
-            canvas.drawCircle(x, y, 3.2f, darkPaint);
-            canvas.drawCircle(x, y, 2f, fillPaint);
+        // Cabeza: punto marcado (índice 5 en el array).
+        if (box.boneCount > 5) {
+            final float hx = box.bones[10], hy = box.bones[11];
+            if (!(hx <= 0f && hy <= 0f)) {
+                fillPaint.setColor(color);
+                fillPaint.setAlpha(245);
+                canvas.drawCircle(hx, hy, 3f, darkPaint);
+                canvas.drawCircle(hx, hy, 2f, fillPaint);
+            }
         }
     }
 
