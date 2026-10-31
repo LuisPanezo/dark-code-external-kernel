@@ -154,7 +154,7 @@ public final class EspOverlayView extends View {
                 final String screen = screenWidth + "x" + screenHeight;
                 final String bin = espDfPath();
                 process = new ProcessBuilder("su", "-c",
-                        bin + " pipe --screen " + screen)
+                        bin + " pipe --screen " + screen + " --interval 8")
                         .redirectErrorStream(true).start();
                 process.getOutputStream().close();
                 BufferedReader in = new BufferedReader(

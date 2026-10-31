@@ -65,7 +65,7 @@ struct Options {
     int         poll_interval_ms{16};
     float       eye_extra_cm{10.f};
     float       default_eye_cm{165.f};
-    float       box_width_ratio{0.45f};
+    float       box_width_ratio{0.35f};
     float       aspect{16.f / 9.f};      // relación usada para el vfov del snapshot
     Codec       codec{Codec::Auto};
     bool        verbose{false};

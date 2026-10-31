@@ -425,9 +425,10 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
         }
 
         // Altura por cápsula (agachado/tumbado); respaldo: eye_cm.
+        // +8 cm de margen de cabeza: la cápsula termina en el cuello.
         float height_cm;
         if (cached.half_height_cm > 0.f) {
-            height_cm = cached.half_height_cm * 2.f;
+            height_cm = cached.half_height_cm * 2.f + 8.f;
         } else {
             const float eye_cm = cached.eye_cm > 0.f ? cached.eye_cm : options_.default_eye_cm;
             height_cm = eye_cm + options_.eye_extra_cm;
