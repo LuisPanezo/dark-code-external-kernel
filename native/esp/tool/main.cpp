@@ -850,6 +850,48 @@ void ScanBotMesh(IMemoryDriver& driver, uintptr_t actor) {
     }
 }
 
+/* Escanea el World y la cadena del jugador en busca del estado "reveal"
+ * (enemigos pintados de rojo al capturar un punto). */
+void DumpReveal(IMemoryDriver& driver, uintptr_t world, uintptr_t ms, uintptr_t me) {
+    PlayerChain chain;
+    if (!ReadPlayerChain(driver, world, chain)) {
+        std::printf("reveal: cadena inválida\n");
+        return;
+    }
+    std::printf("controller %s pawn %s camera %s\n",
+                Hex(chain.controller).c_str(), Hex(chain.pawn).c_str(),
+                Hex(chain.camera_manager).c_str());
+
+    // UObjects en el World (GameState candidato).
+    std::vector<unsigned char> wb(0x1000);
+    const size_t wgot = driver.read(world, wb.data(), wb.size());
+    std::printf("UObjects en el World:\n");
+    for (size_t off = 0; off + 8 <= wgot; off += 8) {
+        uintptr_t p = 0;
+        std::memcpy(&p, wb.data() + off, 8);
+        if (p < 0x600000000000ULL || p > 0x780000000000ULL) continue;
+        const uintptr_t vt = ReadPtr(driver, p);
+        if (vt < ms || vt >= me) continue;
+        std::printf("  world+0x%zx: obj=%s vtable=%s\n", off, Hex(p).c_str(), Hex(vt).c_str());
+    }
+
+    // Volcar controller + pawn: ints==1 (posible bandera reveal).
+    const uintptr_t objs[2] = {chain.controller, chain.pawn};
+    const char* names[2] = {"controller", "pawn"};
+    for (int k = 0; k < 2; ++k) {
+        const uintptr_t obj = objs[k];
+        if (!PlausiblePointer(obj)) continue;
+        std::vector<unsigned char> blk(0x2000);
+        const size_t got = driver.read(obj, blk.data(), blk.size());
+        std::printf("%s: ints==1:\n", names[k]);
+        for (size_t off = 0; off + 4 <= got; off += 4) {
+            int32_t v = 0;
+            std::memcpy(&v, blk.data() + off, 4);
+            if (v == 1) std::printf("  +0x%zx = 1\n", off);
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -865,7 +907,7 @@ int main(int argc, char** argv) {
 
         if (argument == "probe" || argument == "test" || argument == "loop" || argument == "chain" || argument == "camera" || argument == "names" || argument == "snapshot" ||
             argument == "pipe" || argument == "team" || argument == "dump" || argument == "scan" ||
-            argument == "teams" || argument == "capsule" || argument == "bones" || argument == "botmesh") {
+            argument == "teams" || argument == "capsule" || argument == "bones" || argument == "botmesh" || argument == "reveal") {
             g_mode = argument;
         } else if (argument == "--package") {
             if (const char* value = next()) options.package = value;
@@ -1115,6 +1157,12 @@ int main(int argc, char** argv) {
         }
         if (bot) ScanBotMesh(*raw_driver, bot);
         else std::printf("botmesh: sin bots\n");
+        return 0;
+    }
+
+    if (g_mode == "reveal") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        DumpReveal(*raw_driver, reader.World(), reader.Module().start, reader.Module().end);
         return 0;
     }
 
