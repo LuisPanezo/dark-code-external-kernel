@@ -437,7 +437,13 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
 
         Target target;
         target.actor = actor;
-        target.feet_cm = decoded.value;
+        // decoded.value es el CENTRO de la cápsula (pies + media-altura).
+        // Restar la media-altura para obtener los PIES reales (bajar la box).
+        Vec3 feet = decoded.value;
+        if (cached.half_height_cm > 0.f) {
+            feet.z -= cached.half_height_cm;
+        }
+        target.feet_cm = feet;
         target.height_cm = height_cm;
         target.width_cm = height_cm * options_.box_width_ratio;
         target.distance_m = distance_m;
@@ -450,7 +456,7 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
         // Esqueleto: solo personajes cercanos (los lejanos son puntos diminutos).
         if (distance_m < 120.f && cached.mesh) {
             target.bone_count = ReadBones(*driver_, cached.mesh, cached.capsule,
-                                          decoded.value, target.bones);
+                                          feet, target.bones);
         }
 
         targets_.push_back(std::move(target));
