@@ -892,6 +892,23 @@ void DumpReveal(IMemoryDriver& driver, uintptr_t world, uintptr_t ms, uintptr_t 
     }
 }
 
+/* Activa/desactiva el "cham" escribiendo en controller+0x7B0 (reveal). */
+void SetCham(IMemoryDriver& driver, uintptr_t world, int32_t value) {
+    PlayerChain chain;
+    if (!ReadPlayerChain(driver, world, chain) || !PlausiblePointer(chain.controller)) {
+        std::printf("cham: cadena/controller inválido\n");
+        return;
+    }
+    const uintptr_t addr = chain.controller + 0x7B0;
+    int32_t before = 0;
+    Read(driver, addr, before);
+    const bool ok = driver.write(addr, &value, sizeof(value));
+    int32_t after = 0;
+    Read(driver, addr, after);
+    std::printf("cham: controller %s +0x7B0 antes=%d -> escritura=%s -> ahora=%d\n",
+                Hex(chain.controller).c_str(), before, ok ? "OK" : "FALLO", after);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -907,7 +924,7 @@ int main(int argc, char** argv) {
 
         if (argument == "probe" || argument == "test" || argument == "loop" || argument == "chain" || argument == "camera" || argument == "names" || argument == "snapshot" ||
             argument == "pipe" || argument == "team" || argument == "dump" || argument == "scan" ||
-            argument == "teams" || argument == "capsule" || argument == "bones" || argument == "botmesh" || argument == "reveal") {
+            argument == "teams" || argument == "capsule" || argument == "bones" || argument == "botmesh" || argument == "reveal" || argument == "cham" || argument == "chamoff") {
             g_mode = argument;
         } else if (argument == "--package") {
             if (const char* value = next()) options.package = value;
@@ -1163,6 +1180,18 @@ int main(int argc, char** argv) {
     if (g_mode == "reveal") {
         std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
         DumpReveal(*raw_driver, reader.World(), reader.Module().start, reader.Module().end);
+        return 0;
+    }
+
+    if (g_mode == "cham") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        SetCham(*raw_driver, reader.World(), 1);
+        return 0;
+    }
+
+    if (g_mode == "chamoff") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        SetCham(*raw_driver, reader.World(), 0);
         return 0;
     }
 
