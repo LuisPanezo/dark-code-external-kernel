@@ -22,7 +22,7 @@ constexpr uintptr_t BASE_EYE_HEIGHT = 0x37C;   // ACharacter::BaseEyeHeight (flo
 /* ═══ Esqueleto: USkeletalMeshComponent ═══ */
 constexpr uintptr_t COMPONENT_TRANSLATION = 0x148; // ComponentToWorld.Translation (FVector)
 constexpr uintptr_t COMPONENT_ROTATION    = 0x1D0; // ComponentToWorld.Rotation (FQuat x,y,z,w)
-constexpr uintptr_t BONE_TRANSFORMS     = 0x760; // ComponentSpaceTransforms (TArray<FTransform>)
+constexpr uintptr_t BONE_TRANSFORMS     = 0xEA8; // ComponentSpaceTransforms ANIMADO (TArray<FTransform>)
 
 /* Huesos principales del esqueleto de Delta Force (77 huesos), en orden:
  * pelvis→columna→cuello→cabeza, brazos y piernas. Índices REALES del juego,
