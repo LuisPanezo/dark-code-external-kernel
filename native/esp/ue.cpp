@@ -255,12 +255,14 @@ static Vec3 RotateByQuat(const Vec3& v, float qx, float qy, float qz, float qw) 
 }
 
 /* Lee los huesos principales (kMainBoneIndex) en mundo, en cm. */
-int ReadBones(IMemoryDriver& driver, uintptr_t mesh, Vec3* out) {
+int ReadBones(IMemoryDriver& driver, uintptr_t mesh, uintptr_t capsule, Vec3* out) {
     if (!PlausiblePointer(mesh)) return 0;
 
-    // Rotación (FQuat) en mesh+0x1D0, traslación (FVector) en mesh+0x148.
+    // Rotación (FQuat) en capsule+0x1D0 (el yaw real), traslación en mesh+0x148.
     float q[4] = {0};
-    if (!Read(driver, mesh + off::COMPONENT_ROTATION, q)) return 0;
+    if (!PlausiblePointer(capsule) || !Read(driver, capsule + off::COMPONENT_ROTATION, q)) {
+        q[0] = q[1] = q[2] = 0.f; q[3] = 1.f;   // sin cápsula: rotación identidad
+    }
     const float qx = q[0], qy = q[1], qz = q[2], qw = q[3];
     float t[3] = {0};
     if (!Read(driver, mesh + off::COMPONENT_TRANSLATION, t)) return 0;

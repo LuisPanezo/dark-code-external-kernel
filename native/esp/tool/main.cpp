@@ -679,7 +679,7 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
     }
     std::printf("actor pos: %.0f %.0f %.0f\n", pawn_pos.x, pawn_pos.y, pawn_pos.z);
 
-    std::vector<unsigned char> block(0x800);
+    std::vector<unsigned char> block(0x2000);
     const size_t got = driver.read(mesh, block.data(), block.size());
 
     std::printf("TArray<FTransform> candidatos (data+num+max):\n");
@@ -762,17 +762,70 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
         }
     }
 
-    // Buscar el asset SkeletalMesh (UObject apuntado por el mesh) para leer la
-    // jerarquía real de huesos (RefBoneInfo → ParentIndex de cada hueso).
+    // Cuaterniones unitarios en el MESH (para verificar la rotación).
     {
-        std::printf("UObjects en mesh (candidatos a asset SkeletalMesh):\n");
+        std::printf("mesh: cuaterniones unitarios (|q|~1):\n");
+        for (size_t off = 0; off + 16 <= got; off += 4) {
+            float q[4] = {0};
+            std::memcpy(q, block.data() + off, 16);
+            const float n = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+            if (n > 0.9f && n < 1.1f && (std::fabs(q[0]) > 0.01f || std::fabs(q[3]) > 0.01f)) {
+                const float yaw = std::atan2(2.f * (q[3] * q[2] + q[0] * q[1]),
+                                             1.f - 2.f * (q[1] * q[1] + q[2] * q[2])) * 57.2957795f;
+                std::printf("  mesh+0x%zx: q=(%.3f %.3f %.3f %.3f) yaw=%.1f°\n",
+                            off, q[0], q[1], q[2], q[3], yaw);
+            }
+        }
+    }
+
+    // Buscar el asset SkeletalMesh (UObject apuntado por el mesh) y sus índices
+    // padre (RefBoneInfo → ParentIndex), que dan la jerarquía real de huesos.
+    {
+        std::printf("Assets SkeletalMesh (UObject) + RefBoneInfo (indices padre):\n");
+        std::vector<unsigned char> ablock(0x3000);
         for (size_t off = 0; off + 8 <= got; off += 8) {
             uintptr_t ptr = 0;
             std::memcpy(&ptr, block.data() + off, 8);
             if (ptr < 0x600000000000ULL || ptr > 0x780000000000ULL) continue;
             const uintptr_t vt = ReadPtr(driver, ptr);
             if (vt < 0x600000000000ULL || vt > 0x780000000000ULL) continue;
-            std::printf("  mesh+0x%zx: asset=%s vtable=%s\n", off, Hex(ptr).c_str(), Hex(vt).c_str());
+            const size_t agot = driver.read(ptr, ablock.data(), ablock.size());
+            // Buscar TArray<FMeshBoneInfo>: data+num+max, parent en +8 stride 12/16.
+            bool found = false;
+            for (int stride : {12, 16}) {
+                for (size_t a = 0; a + 16 <= agot; a += 4) {
+                    uintptr_t bdata = 0;
+                    int32_t num = 0, max = 0;
+                    std::memcpy(&bdata, ablock.data() + a, 8);
+                    std::memcpy(&num, ablock.data() + a + 8, 4);
+                    std::memcpy(&max, ablock.data() + a + 12, 4);
+                    if (!PlausiblePointer(bdata) || num < 50 || num > 200 || max < num) continue;
+                    // Ver patrón: parent[0]=-1, parent[1]=0, parent[2]=1.
+                    int32_t p0 = 0, p1 = 0, p2 = 0;
+                    Read(driver, bdata + 8, p0);
+                    Read(driver, bdata + 8 + stride, p1);
+                    Read(driver, bdata + 8 + 2 * stride, p2);
+                    if (p0 == -1 && p1 == 0 && p2 >= 0 && p2 <= 2) {
+                        std::printf("  mesh+0x%zx asset=%s -> RefBoneInfo en +0x%zx (num=%d stride=%d)\n",
+                                    off, Hex(ptr).c_str(), a, num, stride);
+                        // Volcar los primeros 40 parent indices.
+                        std::printf("    padres: ");
+                        for (int i = 0; i < 40 && i < num; ++i) {
+                            int32_t p = 0;
+                            Read(driver, bdata + 8 + i * stride, p);
+                            std::printf("%d ", p);
+                        }
+                        std::printf("\n");
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+            if (!found) {
+                std::printf("  mesh+0x%zx: asset=%s vtable=%s (sin RefBoneInfo)\n",
+                            off, Hex(ptr).c_str(), Hex(vt).c_str());
+            }
         }
     }
 }

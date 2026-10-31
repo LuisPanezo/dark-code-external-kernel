@@ -80,6 +80,6 @@ float ReadEyeHeight(IMemoryDriver& driver, uintptr_t character, float fallback_c
 
 /* Lee los huesos principales del SkeletalMesh y los devuelve en mundo (cm).
  * `out` admite kMainBoneCount elementos; devuelve cuántos se rellenaron. */
-int ReadBones(IMemoryDriver& driver, uintptr_t mesh, Vec3* out);
+int ReadBones(IMemoryDriver& driver, uintptr_t mesh, uintptr_t capsule, Vec3* out);
 
 } // namespace dc::esp
