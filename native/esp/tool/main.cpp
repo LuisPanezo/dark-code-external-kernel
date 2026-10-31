@@ -744,19 +744,20 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
         }
     }
 
-    // Primeros huesos de AMBOS arrays (0x750 y 0x760), stride 48, trans en +16.
+    // Todos los huesos de AMBOS arrays, stride 48, trans en +16.
     for (uintptr_t arr : {0x750u, 0x760u}) {
         const uintptr_t bone_data = ReadPtr(driver, mesh + arr);
         int32_t bone_num = 0;
         Read(driver, mesh + arr + 8, bone_num);
-        std::printf("bones @ mesh+0x%lx: data=%s num=%d (primeros 5, trans en +16)\n",
+        std::printf("bones @ mesh+0x%lx: data=%s num=%d (trans en +16)\n",
                     static_cast<unsigned long>(arr), Hex(bone_data).c_str(), bone_num);
-        std::vector<unsigned char> bb(48 * 5);
+        if (bone_num < 1 || bone_num > 200) continue;
+        std::vector<unsigned char> bb(static_cast<size_t>(bone_num) * 48);
         if (bone_data && driver.read(bone_data, bb.data(), bb.size()) == bb.size()) {
-            for (int i = 0; i < 5; ++i) {
+            for (int i = 0; i < bone_num; ++i) {
                 float trans[3] = {0};
                 std::memcpy(trans, bb.data() + i * 48 + 16, 12);
-                std::printf("  bone%d: (%.1f %.1f %.1f)\n", i, trans[0], trans[1], trans[2]);
+                std::printf("  b%02d: (%.0f %.0f %.0f)\n", i, trans[0], trans[1], trans[2]);
             }
         }
     }
@@ -776,6 +777,28 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
     }
 }
 
+/* Escanea un bot (sin mesh en 0x3D0) para encontrar su SkeletalMeshComponent:
+ * busca punteros cuyo +0x760 sea un TArray<FTransform> con 50..200 huesos. */
+void ScanBotMesh(IMemoryDriver& driver, uintptr_t actor) {
+    std::vector<unsigned char> block(0x3000);
+    const size_t got = driver.read(actor, block.data(), block.size());
+    std::printf("bot actor %s (%zu bytes)\n", Hex(actor).c_str(), got);
+    std::printf("punteros a SkeletalMeshComponent (TArray<FTransform> en +0x760):\n");
+    for (size_t off = 0; off + 8 <= got; off += 8) {
+        uintptr_t p = 0;
+        std::memcpy(&p, block.data() + off, 8);
+        if (p < 0x600000000000ULL || p > 0x780000000000ULL) continue;
+        const uintptr_t data = ReadPtr(driver, p + 0x760);
+        int32_t num = 0;
+        if (!Read(driver, p + 0x768, num)) continue;
+        if (!PlausiblePointer(data) || num < 50 || num > 200) continue;
+        float trans[3] = {0};
+        Read(driver, p + 0x148, trans);
+        std::printf("  actor+0x%zx: mesh=%s (bones num=%d, pos=%.0f %.0f %.0f)\n",
+                    off, Hex(p).c_str(), num, trans[0], trans[1], trans[2]);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -791,7 +814,7 @@ int main(int argc, char** argv) {
 
         if (argument == "probe" || argument == "test" || argument == "loop" || argument == "chain" || argument == "camera" || argument == "names" || argument == "snapshot" ||
             argument == "pipe" || argument == "team" || argument == "dump" || argument == "scan" ||
-            argument == "teams" || argument == "capsule" || argument == "bones") {
+            argument == "teams" || argument == "capsule" || argument == "bones" || argument == "botmesh") {
             g_mode = argument;
         } else if (argument == "--package") {
             if (const char* value = next()) options.package = value;
@@ -1001,10 +1024,31 @@ int main(int argc, char** argv) {
             const uintptr_t m = ReadPtr(*raw_driver, t.actor + off::MESH);
             if (!PlausiblePointer(m)) continue;
             const uintptr_t vt = ReadPtr(*raw_driver, m);
-            if (vt >= ms && vt < me) { target_actor = t.actor; break; }
+            if (vt < ms || vt >= me) continue;
+            // SkeletalMeshComponent: tiene array de huesos (num 50..200) en +0x760.
+            const uintptr_t bdata = ReadPtr(*raw_driver, m + 0x760);
+            int32_t bnum = 0;
+            Read(*raw_driver, m + 0x768, bnum);
+            if (PlausiblePointer(bdata) && bnum >= 50 && bnum <= 200) {
+                target_actor = t.actor; break;
+            }
         }
         if (target_actor) DumpBones(*raw_driver, target_actor);
         else std::printf("bones: sin objetivo con mesh válido\n");
+        return 0;
+    }
+
+    if (g_mode == "botmesh") {
+        std::printf("[*] estado=%s\n", StateName(reader.CurrentState()));
+        dc::FrameSnapshot frame;
+        reader.ReadLatest(frame);
+        uintptr_t bot = 0;
+        for (const Target& t : reader.Targets()) {
+            const uintptr_t m = ReadPtr(*raw_driver, t.actor + off::MESH);
+            if (!PlausiblePointer(m)) { bot = t.actor; break; }
+        }
+        if (bot) ScanBotMesh(*raw_driver, bot);
+        else std::printf("botmesh: sin bots\n");
         return 0;
     }
 

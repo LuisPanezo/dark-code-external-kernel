@@ -24,10 +24,11 @@ constexpr uintptr_t COMPONENT_TRANSLATION = 0x148; // ComponentToWorld.Translati
 constexpr uintptr_t COMPONENT_ROTATION    = 0x1D0; // ComponentToWorld.Rotation (FQuat x,y,z,w)
 constexpr uintptr_t BONE_TRANSFORMS     = 0x760; // ComponentSpaceTransforms (TArray<FTransform>)
 
-/* Huesos principales (índices del esqueleto UE4 estándar), en orden para
- * dibujar: pelvis→columna→cuello→cabeza, brazos y piernas. */
-constexpr int kMainBoneIndex[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                                  26, 27, 28, 29, 45, 46, 47, 53, 54, 55};
+/* Huesos principales del esqueleto de Delta Force (77 huesos), en orden:
+ * pelvis→columna→cuello→cabeza, brazos y piernas. Índices REALES del juego,
+ * no los del maniquí estándar de UE4. */
+constexpr int kMainBoneIndex[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 11,
+                                  29, 30, 32, 57, 59, 60, 61, 63, 64, 65};
 constexpr int kMainBoneCount = 20;
 
 /* ═══ Posición: FVector de 16 bytes (3 floats + trailer de cifrado) ═══ */

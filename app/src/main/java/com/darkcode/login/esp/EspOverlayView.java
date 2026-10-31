@@ -269,11 +269,12 @@ public final class EspOverlayView extends View {
         }
     }
 
-    /* Conexiones del esqueleto: pares de índices en el array de 20 huesos. */
+    /* Conexiones del esqueleto de Delta Force: pares de índices en el array
+     * de 20 huesos (kMainBoneIndex). */
     private static final int[][] BONE_LINKS = {
         {0,1},{1,2},{2,3},{3,4},{4,5},    // pelvis→columna→cuello→cabeza
-        {3,6},{6,7},{7,8},{8,9},          // columna→brazo izq
-        {3,10},{10,11},{11,12},{12,13},   // columna→brazo der
+        {4,6},{6,7},{7,8},{8,9},          // cuello→brazo izq
+        {4,10},{10,11},{11,12},{12,13},   // cuello→brazo der
         {0,14},{14,15},{15,16},           // pelvis→pierna izq
         {0,17},{17,18},{18,19}            // pelvis→pierna der
     };
