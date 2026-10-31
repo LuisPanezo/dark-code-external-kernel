@@ -124,14 +124,14 @@ public final class EspOverlayView extends View {
     private String espDfPath() {
         try {
             final File local = new File(getContext().getCacheDir(), "esp_df");
-            if (!local.exists() || local.length() < 1024) {
-                try (InputStream in = getContext().getAssets().open("esp_df");
-                     FileOutputStream out = new FileOutputStream(local)) {
-                    final byte[] buf = new byte[65536];
-                    int n;
-                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                    out.flush();
-                }
+            // Siempre re-extraer el binario empaquetado: evita que una versión
+            // vieja quede en caché y se use en lugar de la nueva.
+            try (InputStream in = getContext().getAssets().open("esp_df");
+                 FileOutputStream out = new FileOutputStream(local)) {
+                final byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
             }
             final Process p = new ProcessBuilder("su", "-c",
                     "cp " + local.getAbsolutePath() + " /data/local/tmp/esp_df && " +
