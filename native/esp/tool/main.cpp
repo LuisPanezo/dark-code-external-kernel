@@ -744,24 +744,22 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor, uintptr_t ms, uintptr_t m
         }
     }
 
-    // Todos los arrays TArray<FTransform> (num 50..200) + sus primeros 5 huesos.
-    for (size_t off = 0; off + 16 <= got; off += 8) {
-        uintptr_t ptr = 0;
-        int32_t num = 0, max = 0;
-        std::memcpy(&ptr, block.data() + off, 8);
-        std::memcpy(&num, block.data() + off + 8, 4);
-        std::memcpy(&max, block.data() + off + 12, 4);
-        if (!PlausiblePointer(ptr) || num < 50 || num > 200 || max < num) continue;
-        std::printf("bones @ mesh+0x%zx: num=%d:", off, num);
-        std::vector<unsigned char> bb(48 * 5);
-        if (driver.read(ptr, bb.data(), bb.size()) == bb.size()) {
-            for (int i = 0; i < 5; ++i) {
-                float trans[3] = {0};
-                std::memcpy(trans, bb.data() + i * 48 + 16, 12);
-                std::printf(" (%.0f %.0f %.0f)", trans[0], trans[1], trans[2]);
+    // Array ANIMADO (+0xEA8): todos los huesos (para mapear brazos/piernas).
+    {
+        const uintptr_t ptr = ReadPtr(driver, mesh + 0xEA8);
+        int32_t num = 0;
+        Read(driver, mesh + 0xEA8 + 8, num);
+        std::printf("anim @ +0xEA8 num=%d:\n", num);
+        if (PlausiblePointer(ptr) && num >= 1 && num <= 200) {
+            std::vector<unsigned char> bb(static_cast<size_t>(num) * 48);
+            if (driver.read(ptr, bb.data(), bb.size()) == bb.size()) {
+                for (int i = 0; i < num; ++i) {
+                    float trans[3] = {0};
+                    std::memcpy(trans, bb.data() + i * 48 + 16, 12);
+                    std::printf("  b%02d: (%.0f %.0f %.0f)\n", i, trans[0], trans[1], trans[2]);
+                }
             }
         }
-        std::printf("\n");
     }
 
     // Cuaterniones unitarios en el MESH (para verificar la rotación).
@@ -1075,6 +1073,19 @@ int main(int argc, char** argv) {
         const uintptr_t ms = reader.Module().start, me = reader.Module().end;
         std::printf("[*] módulo %s..%s (span=0x%zx)\n",
                     Hex(ms).c_str(), Hex(me).c_str(), static_cast<size_t>(me - ms));
+        // Verificar la rotación del jugador local (cápsula) vs cámara.
+        {
+            PlayerChain chain;
+            if (ReadPlayerChain(*raw_driver, reader.World(), chain)) {
+                const uintptr_t cap = ReadPtr(*raw_driver, chain.pawn + off::CAPSULE);
+                float q[4] = {0};
+                if (cap && Read(*raw_driver, cap + 0x1D0, q)) {
+                    const float yaw = std::atan2(2.f * (q[3] * q[2] + q[0] * q[1]),
+                                                 1.f - 2.f * (q[1] * q[1] + q[2] * q[2])) * 57.2957795f;
+                    std::printf("[*] local: cap yaw=%.1f°\n", yaw);
+                }
+            }
+        }
         for (const Target& t : reader.Targets()) {
             const uintptr_t m = ReadPtr(*raw_driver, t.actor + off::MESH);
             if (!PlausiblePointer(m)) continue;

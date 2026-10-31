@@ -28,8 +28,8 @@ constexpr uintptr_t BONE_TRANSFORMS     = 0xEA8; // ComponentSpaceTransforms ANI
  * pelvis→columna→cuello→cabeza, brazos y piernas. Índices REALES del juego,
  * no los del maniquí estándar de UE4. */
 constexpr int kMainBoneIndex[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-                                  29, 30, 31, 32, 57, 59, 60, 61, 63, 64, 65};
-constexpr int kMainBoneCount = 22;
+                                  30, 31, 32, 34, 35, 58, 59, 60, 61, 62, 63, 64, 65};
+constexpr int kMainBoneCount = 24;
 
 /* ═══ Posición: FVector de 16 bytes (3 floats + trailer de cifrado) ═══ */
 constexpr uintptr_t REL_LOCATION    = 0x168;   // USceneComponent::RelativeLocation

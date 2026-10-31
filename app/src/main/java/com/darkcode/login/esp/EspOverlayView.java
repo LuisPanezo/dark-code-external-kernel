@@ -46,7 +46,7 @@ public final class EspOverlayView extends View {
         float hp;
         float dist;
         String name = "";
-        float[] bones = new float[48];  // 24 huesos × (x,y) en pantalla
+        float[] bones = new float[64];  // 32 huesos × (x,y) en pantalla
         int boneCount;
     }
 
@@ -270,13 +270,13 @@ public final class EspOverlayView extends View {
     }
 
     /* Conexiones del esqueleto de Delta Force: pares de índices en el array
-     * de 22 huesos (kMainBoneIndex). */
+     * de 24 huesos (kMainBoneIndex). */
     private static final int[][] BONE_LINKS = {
         {0,1},{1,2},{2,3},{3,4},{4,5},          // pelvis→columna→cuello→cabeza
         {4,6},{6,7},{7,8},{8,9},{9,10},         // cuello→brazo izq (hombro→mano)
         {4,11},{11,12},{12,13},{13,14},{14,15}, // cuello→brazo der
-        {0,16},{16,17},{17,18},                 // pelvis→pierna izq
-        {0,19},{19,20},{20,21}                  // pelvis→pierna der
+        {0,16},{16,17},{17,18},{18,19},         // pelvis→pierna izq (muslo→pie)
+        {0,20},{20,21},{21,22},{22,23}          // pelvis→pierna der
     };
 
     /* Esqueleto: líneas hueso-a-hueso con el color del objetivo. */
