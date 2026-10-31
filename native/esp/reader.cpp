@@ -245,6 +245,7 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
 
     targets_.clear();
     seen_.clear();
+    seen_roots_.clear();
     stats_.ticks = tick_;
     stats_.actors_in_level = 0;
     stats_.actors_considered = 0;
@@ -256,6 +257,7 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
     stats_.encrypted = 0;
     stats_.plain = 0;
     stats_.unreadable = 0;
+    stats_.duplicates = 0;
 
     if (!driver_->is_open()) {
         state_ = State::NoDriver;
@@ -348,6 +350,13 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
             continue;
         }
 
+        // Dedup por RootComponent: varios actores pueden compartir el mismo
+        // root (alias/componentes) y duplicarían la caja sobre el personaje.
+        if (!seen_roots_.insert(cached.root).second) {
+            ++stats_.duplicates;
+            continue;
+        }
+
         // Rechazo temprano de props: si no tiene mesh/name/vida/equipo, no
         // malgastamos la lectura de posición (cientos de decorados). Usa solo
         // campos cacheados, así que no cuesta ioctl extra y sube la fluidez.
@@ -392,6 +401,13 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
 
         float health = -1.f;
         if (cached.health_set) ReadHealthValue(*driver_, cached.health_set, health);
+
+        // Cadáver (vida exactamente 0): ya eliminado, no dibujar la caja. Los
+        // bots tienen -1 (sin vida legible) y se mantienen como objetivos.
+        if (health == 0.f) {
+            ++stats_.rejected_position;
+            continue;
+        }
 
         // Personaje REAL: Mesh válido (ACharacter), nombre (jugador humano),
         // vida real (bot, >=1) o equipo sano (1..16). Los props no cumplen nada.

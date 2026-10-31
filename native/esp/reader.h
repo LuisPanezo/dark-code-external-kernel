@@ -92,6 +92,7 @@ private:
     std::vector<Target>       targets_;
     std::unordered_map<uintptr_t, CachedActor> cache_;
     std::unordered_set<uintptr_t> seen_;
+    std::unordered_set<uintptr_t> seen_roots_;
     uint64_t    tick_{};
     int32_t     self_team_{-1};
     uintptr_t   self_team_actor_{};

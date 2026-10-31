@@ -985,11 +985,11 @@ int main(int argc, char** argv) {
 
         const Stats& stats = reader.Statistics();
         std::printf("== STATS: self_team=%d pawn=%s | cifrados %d/%zu | aceptados %d | vistos %d | lejos %d | "
-                    "equipo %d | sin root %d | ilegibles %d ==\n",
+                    "equipo %d | sin root %d | ilegibles %d | dup %d ==\n",
                     reader.SelfTeam(), Hex(reader.SelfPawn()).c_str(),
                     stats.encrypted, targets.size(), stats.accepted, stats.actors_considered,
                     stats.rejected_distance, stats.teammates, stats.rejected_pointer,
-                    stats.unreadable);
+                    stats.unreadable, stats.duplicates);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
     }

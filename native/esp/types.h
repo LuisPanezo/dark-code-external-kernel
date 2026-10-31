@@ -99,6 +99,7 @@ struct Stats {
     int encrypted{};
     int plain{};
     int unreadable{};
+    int duplicates{};
     int last_errno{};
 };
 
