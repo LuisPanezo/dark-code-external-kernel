@@ -660,7 +660,7 @@ void DumpCapsule(IMemoryDriver& driver, uintptr_t world) {
 
 /* Escanea el SkeletalMesh de un actor para localizar el array de huesos,
  * el ComponentToWorld y la rotación (yaw) en la cápsula. */
-void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
+void DumpBones(IMemoryDriver& driver, uintptr_t actor, uintptr_t ms, uintptr_t me) {
     const uintptr_t mesh = ReadPtr(driver, actor + off::MESH);
     std::printf("actor %s  mesh(0x%lx) %s\n", Hex(actor).c_str(),
                 static_cast<unsigned long>(off::MESH), Hex(mesh).c_str());
@@ -788,7 +788,7 @@ void DumpBones(IMemoryDriver& driver, uintptr_t actor) {
             std::memcpy(&ptr, block.data() + off, 8);
             if (ptr < 0x600000000000ULL || ptr > 0x780000000000ULL) continue;
             const uintptr_t vt = ReadPtr(driver, ptr);
-            if (vt < 0x600000000000ULL || vt > 0x780000000000ULL) continue;
+            if (vt < ms || vt >= me) continue;
             const size_t agot = driver.read(ptr, ablock.data(), ablock.size());
             // Buscar TArray<FMeshBoneInfo>: data+num+max, parent en +8 stride 12/16.
             bool found = false;
@@ -1086,7 +1086,7 @@ int main(int argc, char** argv) {
                 target_actor = t.actor; break;
             }
         }
-        if (target_actor) DumpBones(*raw_driver, target_actor);
+        if (target_actor) DumpBones(*raw_driver, target_actor, ms, me);
         else std::printf("bones: sin objetivo con mesh válido\n");
         return 0;
     }
