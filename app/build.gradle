@@ -19,7 +19,7 @@ android {
             cppFlags '-std=c++17'
             arguments '-DDARKCODE_PANEL_ONLY=' + (panelOnly ? 'ON' : 'OFF')
         } }
-        testInstrumentationRunner providers.gradleProperty('testRunner').getOrElse('com.darkcode.login.PreviewRunner')
+        testInstrumentationRunner providers.gradleProperty('testRunner').getOrElse('com.darkcode.login.AuthCheckRunner')
         buildConfigField 'String', 'AUTH_BASE_URL', '"' + authUrl + '"'
         buildConfigField 'boolean', 'PANEL_ONLY', panelOnly.toString()
         manifestPlaceholders = [espEnabled: (!panelOnly).toString()]
