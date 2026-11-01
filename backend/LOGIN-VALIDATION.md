@@ -27,11 +27,16 @@
 
 ## Pendiente para declarar el flujo completo verificado
 
-ADB no detectó dispositivos durante esta revisión. Falta instalar esta APK y
-probar login válido e inválido, pérdida de red, volver del segundo plano,
-vencimiento, logout y paso al permiso root en el teléfono.
+APK instalada en Samsung SM-S908U. La prueba de instrumentación del cliente
+Android real aprobó: rechazo de contraseña incorrecta, login válido, fecha de
+suscripción futura, consulta de sesión, logout y rechazo del token revocado.
+El resultado está en `android-auth-validation.txt`. Se eliminó el archivo privado
+de credenciales temporales y se desinstaló el APK auxiliar de pruebas.
 
-El login real, consulta y logout fueron comprobados previamente por API. Eso no
-sustituye las pruebas del cliente Android actualizado. La sesión actual sin token
+Falta comprobar mediante la interfaz la pérdida de red, volver del segundo plano,
+vencimiento y paso a los permisos root y de superposición. La prueba automatizada
+no pulsa controles ni solicita root.
+
+El login real, consulta y logout también fueron comprobados por API. La sesión actual sin token
 de proveedor dura hasta cinco minutos; cambios de acceso en SaoAuth se comprueban
 en el siguiente login, no de manera inmediata dentro de ese intervalo.

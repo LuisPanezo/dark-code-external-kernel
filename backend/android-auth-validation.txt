@@ -1,0 +1,2 @@
+INSTRUMENTATION_RESULT: result=PASS: incorrect password rejected; Android login, subscription expiry, session check, logout and revoked token
+INSTRUMENTATION_CODE: -1

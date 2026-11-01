@@ -26,6 +26,13 @@ public final class AuthCheckRunner extends Instrumentation {
             String device = getTargetContext().getSharedPreferences("installation", Context.MODE_PRIVATE).getString("id", null);
             if (device == null) throw new IllegalStateException("Installation ID absent");
             client = new AuthClient(BuildConfig.AUTH_BASE_URL, device);
+            stage = "incorrect_password";
+            boolean wrongPasswordRejected = false;
+            try { client.login(input.getString("username"), java.util.UUID.randomUUID().toString()); }
+            catch (AuthClient.AuthException expected) {
+                wrongPasswordRejected = expected.getMessage().startsWith("Acceso rechazado.");
+            }
+            if (!wrongPasswordRejected) throw new AssertionError("Incorrect password did not produce the expected rejection");
             stage = "login";
             session = client.login(input.getString("username"), input.getString("password"));
             input.remove("password");
@@ -39,7 +46,7 @@ public final class AuthCheckRunner extends Instrumentation {
             try { client.check(session); } catch (AuthClient.AuthException expected) { rejected = true; }
             if (!rejected) throw new AssertionError("Revoked session accepted");
             session = null;
-            result.putString("result", "PASS: Android login, subscription expiry, session check, logout and revoked token");
+            result.putString("result", "PASS: incorrect password rejected; Android login, subscription expiry, session check, logout and revoked token");
             finish(-1, result);
         } catch (Exception | AssertionError e) {
             result.putString("stage", stage);

@@ -37,16 +37,22 @@ public final class FloatingSceneService extends Service {
         String action=intent==null?null:intent.getAction();
         if(EXIT_APP.equals(action)){closeApp();return START_NOT_STICKY;}
         if(STOP.equals(action)){stopSelf();return START_NOT_STICKY;}
-        if(!AccountState.canOpenPanel()){stopSelf();return START_NOT_STICKY;}
-        if(!Settings.canDrawOverlays(this)){stopSelf();return START_NOT_STICKY;}
+        if(!AccountState.canOpenPanel()){reportReady(intent, false);stopSelf();return START_NOT_STICKY;}
+        if(!Settings.canDrawOverlays(this)){reportReady(intent, false);stopSelf();return START_NOT_STICKY;}
         try {
             showNotification();
             if(root==null)createWindow();
             if(MINIMIZE.equals(action))setMinimized(true);
             else if(EXPAND.equals(action))setMinimized(false);
             running=true;handler.removeCallbacks(permissionCheck);handler.post(permissionCheck);
-        }catch(RuntimeException e){Toast.makeText(this,"No se pudo abrir la ventana flotante",Toast.LENGTH_LONG).show();stopSelf();}
+            reportReady(intent, attached);
+        }catch(RuntimeException e){reportReady(intent, false);Toast.makeText(this,"No se pudo abrir la ventana flotante",Toast.LENGTH_LONG).show();stopSelf();}
         return START_NOT_STICKY;
+    }
+    private void reportReady(Intent intent, boolean ready) {
+        if (intent == null) return;
+        ResultReceiver receiver = intent.getParcelableExtra("panel_ready");
+        if (receiver != null) receiver.send(ready ? 1 : 0, Bundle.EMPTY);
     }
     private void showNotification() {
         NotificationManager manager=getSystemService(NotificationManager.class);
