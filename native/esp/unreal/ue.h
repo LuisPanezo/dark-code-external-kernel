@@ -3,7 +3,7 @@
 
 #include "driver.h"
 #include "offsets.h"
-#include "types.h"
+#include "unreal_types.h"
 
 namespace dc::esp {
 
@@ -16,10 +16,6 @@ bool PlausiblePointer(uintptr_t pointer);
  * APlayerCameraManager, incluido el roll.
  */
 void BasisFromRotator(const Rotator& rotation, Vec3& forward, Vec3& right, Vec3& up);
-
-/* UE entrega FOV horizontal en pantallas anchas; estas dos lo convierten. */
-float VerticalFovFromHorizontal(float horizontal_radians, float aspect);
-float HorizontalFovFromVertical(float vertical_radians, float aspect);
 
 struct PlayerChain {
     uintptr_t game_instance{};

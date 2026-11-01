@@ -25,23 +25,17 @@ EspService& EspService::Instance() {
 
 EspService::~EspService() { Detach(); }
 
-int EspService::Attach(const Options& options, std::unique_ptr<IMemoryDriver> driver,
-                       std::unique_ptr<IProcessMap> map) {
+int EspService::Attach(std::unique_ptr<IEspEngine> engine) {
+    if (!engine) return DC_ESP_RESULT_FAILED;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (attached_) return DC_ESP_RESULT_ALREADY;
     }
 
-    auto owned_driver = driver ? std::move(driver) : MakePhmeopDriver();
-    auto owned_map = map ? std::move(map) : MakeLinuxProcessMap();
-    auto reader = std::make_unique<EspReader>(std::move(owned_driver), std::move(owned_map),
-                                              options);
-
     std::lock_guard<std::mutex> lock(mutex_);
     if (attached_) return DC_ESP_RESULT_ALREADY;
 
-    options_ = options;
-    reader_ = std::move(reader);
+    engine_ = std::move(engine);
     attached_ = true;
     running_ = true;
     enabled_.store(true);
@@ -52,7 +46,7 @@ int EspService::Attach(const Options& options, std::unique_ptr<IMemoryDriver> dr
     try {
         worker_ = std::thread(&EspService::Loop, this);
     } catch (...) {
-        reader_.reset();
+        engine_.reset();
         attached_ = false;
         running_ = false;
         state_ = State::Error;
@@ -60,6 +54,11 @@ int EspService::Attach(const Options& options, std::unique_ptr<IMemoryDriver> dr
         return DC_ESP_RESULT_FAILED;
     }
     return DC_ESP_RESULT_OK;
+}
+
+int EspService::Attach(const EspConfig& config, EngineKind kind) {
+    if (config.poll_interval_ms > 0) poll_interval_ms_ = config.poll_interval_ms;
+    return Attach(MakeEngine(kind, config));
 }
 
 void EspService::Detach() {
@@ -72,7 +71,7 @@ void EspService::Detach() {
     if (worker_.joinable()) worker_.join();
 
     std::lock_guard<std::mutex> lock(mutex_);
-    reader_.reset();
+    engine_.reset();
     latest_.reset();
     attached_ = false;
     state_ = State::Detached;
@@ -146,6 +145,8 @@ void EspService::Loop() {
     auto next_attempt = clock::now();
     bool started = false;
     dc::FrameSnapshot frame;
+    std::vector<EspTarget> targets;
+    float hfov = 0.f;
 
     while (true) {
         int interval_ms = 16;
@@ -153,7 +154,7 @@ void EspService::Loop() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (!running_) break;
-            interval_ms = std::max(options_.poll_interval_ms, 1);
+            interval_ms = std::max(poll_interval_ms_, 1);
             aspect = aspect_;
         }
 
@@ -166,27 +167,26 @@ void EspService::Loop() {
 
         const auto now = clock::now();
         if (!started && now >= next_attempt) {
-            const dc::Status status = reader_->Start();
+            const dc::Status status = engine_->Start();
             started = status == dc::Status::Ok;
             if (!started) next_attempt = now + std::chrono::milliseconds(2000);
-            PublishStatus(reader_->CurrentState(), reader_->StatusText());
+            PublishStatus(engine_->CurrentState(), engine_->StatusText());
         }
 
         if (started) {
-            reader_->SetAspect(aspect);
-            const dc::Status status = reader_->ReadLatest(frame);
+            engine_->SetAspect(aspect);
+            const dc::Status status = engine_->ReadLatest(frame, targets, hfov);
             if (status == dc::Status::Ok) {
                 auto published = std::make_shared<EspFrame>();
                 published->snapshot = frame;
-                published->targets = reader_->Targets();
-                published->horizontal_fov_radians = reader_->HorizontalFovRadians();
-                published->tick = reader_->Statistics().ticks;
+                published->targets = std::move(targets);
+                published->horizontal_fov_radians = hfov;
                 Publish(std::move(published));
             } else if (status == dc::Status::Disconnected) {
                 started = false;
                 next_attempt = clock::now() + std::chrono::milliseconds(1500);
             }
-            PublishStatus(reader_->CurrentState(), reader_->StatusText());
+            PublishStatus(engine_->CurrentState(), engine_->StatusText());
         }
 
         std::unique_lock<std::mutex> lock(mutex_);
@@ -194,7 +194,7 @@ void EspService::Loop() {
                        [this] { return !running_; });
     }
 
-    if (reader_) reader_->Stop();
+    if (engine_) engine_->Stop();
 }
 
 int EspService::Poll(float width, float height, DcEspBox* out, int capacity) {
@@ -219,7 +219,7 @@ int EspService::Poll(float width, float height, DcEspBox* out, int capacity) {
                                             width, height);
         if (!box.visible) continue;
 
-        const Target& target = frame->targets[index];
+        const EspTarget& target = frame->targets[index];
         DcEspBox& item = out[written];
         item = DcEspBox{};
         item.actor = target.actor;

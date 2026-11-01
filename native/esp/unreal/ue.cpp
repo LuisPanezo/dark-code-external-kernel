@@ -57,18 +57,6 @@ void BasisFromRotator(const Rotator& rotation, Vec3& forward, Vec3& right, Vec3&
     up = {cy * cr * sp + sy * sr, sy * cr * sp - cy * sr, cr * cp};
 }
 
-float VerticalFovFromHorizontal(float horizontal_radians, float aspect) {
-    if (!(aspect > 0.f) || !FiniteF(aspect) || !(horizontal_radians > 0.f) ||
-        horizontal_radians >= 3.14159265f) return 0.f;
-    return 2.f * std::atan(std::tan(horizontal_radians * 0.5f) / aspect);
-}
-
-float HorizontalFovFromVertical(float vertical_radians, float aspect) {
-    if (!(aspect > 0.f) || !FiniteF(aspect) || !(vertical_radians > 0.f) ||
-        vertical_radians >= 3.14159265f) return 0.f;
-    return 2.f * std::atan(std::tan(vertical_radians * 0.5f) * aspect);
-}
-
 bool ReadPlayerChain(IMemoryDriver& driver, uintptr_t world, PlayerChain& chain) {
     chain = PlayerChain{};
     if (!PlausiblePointer(world)) return false;

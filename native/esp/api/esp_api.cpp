@@ -18,7 +18,7 @@ std::string& Scratch() {
 extern "C" {
 
 int dc_esp_attach_config(const DcEspConfig* config) {
-    dc::esp::Options options;
+    dc::esp::EspConfig options;
     if (config) {
         if (config->package && *config->package) options.package = config->package;
         if (config->pid > 0) options.pid = static_cast<pid_t>(config->pid);
@@ -29,7 +29,7 @@ int dc_esp_attach_config(const DcEspConfig* config) {
         options.skip_teammates = config->skip_teammates != 0;
         if (config->poll_interval_ms > 0) options.poll_interval_ms = config->poll_interval_ms;
     }
-    return dc::esp::EspService::Instance().Attach(options);
+    return dc::esp::EspService::Instance().Attach(options, dc::esp::EngineKind::Unreal);
 }
 
 int dc_esp_attach(const char* package_or_null, int pid) {

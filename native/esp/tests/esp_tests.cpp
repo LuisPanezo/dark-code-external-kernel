@@ -11,12 +11,13 @@
 
 #include "api/esp_service.h"
 #include "core/frame_snapshot.h"
-#include "offsets.h"
+#include "fov.h"
+#include "unreal/offsets.h"
 #include "projector.h"
-#include "reader.h"
-#include "scanner.h"
+#include "unreal/reader.h"
+#include "unreal/scanner.h"
 #include "tests/mock_driver.h"
-#include "ue.h"
+#include "unreal/ue.h"
 
 namespace dc::esp {
 namespace {
@@ -267,7 +268,9 @@ int RunEspTests() {
         BuildScene(*owned, Vec3{300.f, 60.f, 0.f});
 
         EspService& service = EspService::Instance();
-        Need(service.Attach(SceneOptions(), std::move(owned)) == DC_ESP_RESULT_OK, "Attach falló");
+        auto engine = std::make_unique<EspReader>(std::move(owned), MakeLinuxProcessMap(),
+                                                  SceneOptions());
+        Need(service.Attach(std::move(engine)) == DC_ESP_RESULT_OK, "Attach falló");
 
         std::shared_ptr<const EspFrame> frame;
         for (int attempt = 0; attempt < 200 && !frame; ++attempt) {

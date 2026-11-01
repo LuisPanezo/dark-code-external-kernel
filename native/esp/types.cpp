@@ -2,15 +2,6 @@
 
 namespace dc::esp {
 
-const char* CodecName(Codec codec) {
-    switch (codec) {
-    case Codec::Plain:   return "plain";
-    case Codec::Trailer: return "trailer";
-    case Codec::Auto:   break;
-    }
-    return "auto";
-}
-
 const char* StateName(State state) {
     switch (state) {
     case State::Detached: return "Detached";

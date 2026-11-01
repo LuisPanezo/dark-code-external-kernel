@@ -26,10 +26,15 @@ function Copy-Relative {
 
 # --- modulo ESP ---
 $espFiles = @(
-    "esp\abi.h", "esp\offsets.h", "esp\types.h", "esp\types.cpp",
+    "esp\abi.h", "esp\types.h", "esp\types.cpp",
     "esp\driver.h", "esp\driver_linux.cpp", "esp\process_linux.cpp",
-    "esp\elf.h", "esp\elf.cpp", "esp\scanner.h", "esp\scanner.cpp",
-    "esp\ue.h", "esp\ue.cpp", "esp\reader.h", "esp\reader.cpp",
+    "esp\elf.h", "esp\elf.cpp",
+    "esp\target.h", "esp\engine.h", "esp\fov.h",
+    "esp\unreal\offsets.h", "esp\unreal\unreal_types.h",
+    "esp\unreal\scanner.h", "esp\unreal\scanner.cpp",
+    "esp\unreal\ue.h", "esp\unreal\ue.cpp",
+    "esp\unreal\reader.h", "esp\unreal\reader.cpp",
+    "esp\unreal\engine_factory.cpp",
     "esp\projector.h", "esp\projector.cpp",
     "esp\api\esp_api.h", "esp\api\esp_api.cpp",
     "esp\api\esp_service.h", "esp\api\esp_service.cpp",
@@ -74,9 +79,10 @@ add_library(esp_core STATIC
     native/esp/driver_linux.cpp
     native/esp/process_linux.cpp
     native/esp/elf.cpp
-    native/esp/scanner.cpp
-    native/esp/ue.cpp
-    native/esp/reader.cpp
+    native/esp/unreal/scanner.cpp
+    native/esp/unreal/ue.cpp
+    native/esp/unreal/reader.cpp
+    native/esp/unreal/engine_factory.cpp
     native/esp/projector.cpp
     native/esp/api/esp_service.cpp
     native/esp/api/esp_api.cpp)

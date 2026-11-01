@@ -19,9 +19,10 @@ add_library(esp_core STATIC
     esp/driver_linux.cpp
     esp/process_linux.cpp
     esp/elf.cpp
-    esp/scanner.cpp
-    esp/ue.cpp
-    esp/reader.cpp
+    esp/unreal/scanner.cpp
+    esp/unreal/ue.cpp
+    esp/unreal/reader.cpp
+    esp/unreal/engine_factory.cpp
     esp/projector.cpp
     esp/api/esp_service.cpp
     esp/api/esp_api.cpp)

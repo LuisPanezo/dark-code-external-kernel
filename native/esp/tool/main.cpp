@@ -25,11 +25,12 @@
 
 #include "core/status.h"
 #include "driver.h"
-#include "offsets.h"
+#include "fov.h"
+#include "unreal/offsets.h"
 #include "projection/projection.h"
 #include "projector.h"
-#include "reader.h"
-#include "ue.h"
+#include "unreal/reader.h"
+#include "unreal/ue.h"
 
 using namespace dc::esp;
 

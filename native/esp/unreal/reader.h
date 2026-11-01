@@ -5,42 +5,59 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/status.h"
 #include "driver.h"
+#include "engine.h"          // IEspEngine
 #include "scanner.h"
-#include "sources/frame_source.h"
-#include "types.h"
+#include "target.h"          // EspTarget, Stats
 #include "ue.h"
+#include "unreal_types.h"    // Options, Target, CameraState
 
 namespace dc::esp {
 
 /*
- * Fuente de frames que lee Delta Force desde el proceso del juego.
+ * Adaptador Unreal / Delta Force. Lee el estado de la partida desde el proceso
+ * del juego y lo convierte a lo canónico:
  *
  *   UWorld → PersistentLevel → Actores → {posición, vida, equipo, nombre}
  *   APlayerCameraManager::CameraCache → POV
  *
- * Publica un dc::FrameSnapshot canónico (metros) usando el adaptador Unreal
- * que ya existe (adapters/normalize). El snapshot sale listo para el motor
- * de escena y para el proyector de pantalla.
+ * Produce un dc::FrameSnapshot canónico (metros) y una lista de EspTarget
+ * (metadata canónica) que consume el EspService. Es la implementación Unreal
+ * de IEspEngine: el núcleo (servicio, proyector, overlay) no conoce estos
+ * detalles; para Unity se escribe otro IEspEngine en native/esp/unity/.
  *
- * Sólo el hilo de adquisición llama Start/ReadLatest/Stop (contrato de
- * IFrameSource). No hace falta root aquí: el driver ya lo exigió al abrir.
+ * Sólo el hilo de adquisición llama Start/ReadLatest/Stop. No hace falta root
+ * aquí: el driver ya lo exigió al abrir.
  */
-class EspReader final : public dc::IFrameSource {
+class EspReader final : public IEspEngine {
 public:
-    EspReader(std::unique_ptr<IMemoryDriver> driver, std::unique_ptr<IProcessMap> map, Options options);
+    EspReader(std::unique_ptr<IMemoryDriver> driver, std::unique_ptr<IProcessMap> map,
+              Options options);
     ~EspReader() override;
 
+    // IEspEngine
     dc::Status Start() override;
-    dc::Status ReadLatest(dc::FrameSnapshot& output) override;
+    dc::Status ReadLatest(dc::FrameSnapshot& snapshot, std::vector<EspTarget>& targets,
+                          float& horizontal_fov_radians) override;
     void Stop() noexcept override;
 
-    /* Última lista aceptada, en centímetros de Unreal. */
+    /* Conveniencia para el tool esp_df: rellena solo el snapshot canónico
+     * (la metadata canónica se descarta; Targets() sigue disponible con la
+     * geometría Unreal en cm). */
+    dc::Status ReadLatest(dc::FrameSnapshot& output) {
+        std::vector<EspTarget> meta;
+        float hfov = 0.f;
+        return ReadLatest(output, meta, hfov);
+    }
+    void SetAspect(float aspect) override;
+    State CurrentState() const override { return state_; }
+    std::string StatusText() const override { return status_; }
+
+    /* Accesos específicos de Unreal (solo para el tool esp_df). */
     const std::vector<Target>& Targets() const { return targets_; }
     const Stats&  Statistics() const { return stats_; }
     const CameraState& Camera() const { return camera_; }
-    const std::string& StatusText() const { return status_; }
-    State   CurrentState() const { return state_; }
     pid_t   ProcessId() const { return pid_; }
     uintptr_t World() const { return world_; }
     uintptr_t WorldVariable() const { return world_variable_; }
@@ -49,7 +66,6 @@ public:
     const Options& Settings() const { return options_; }
     int32_t SelfTeam() const { return self_team_; }
     uintptr_t SelfPawn() const { return self_team_actor_; }
-    void    SetAspect(float aspect);
     void    SetOptions(const Options& options) { options_ = options; }
 
 private:

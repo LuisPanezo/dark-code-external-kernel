@@ -9,6 +9,7 @@
 #include "core/frame_snapshot.h"
 #include "core/status.h"
 #include "elf.h"
+#include "fov.h"
 #include "offsets.h"
 
 namespace dc::esp {
@@ -239,7 +240,8 @@ void EspReader::PruneCache() {
     }
 }
 
-dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
+dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output, std::vector<EspTarget>& targets_out,
+                                 float& horizontal_fov_out) {
     output = dc::FrameSnapshot{};
     ++tick_;
 
@@ -501,6 +503,23 @@ dc::Status EspReader::ReadLatest(dc::FrameSnapshot& output) {
         targets_.clear();
         return dc::Status::InvalidFrame;
     }
+
+    // Metadata canónica para el núcleo (agnóstico). La geometría queda en
+    // targets_ (cm, Unreal) para el tool esp_df; el servicio usa targets_out.
+    targets_out.clear();
+    targets_out.reserve(targets_.size());
+    for (const Target& target : targets_) {
+        EspTarget meta;
+        meta.actor = target.actor;
+        meta.distance_m = target.distance_m;
+        meta.health = target.health;
+        meta.team = target.team;
+        meta.encrypted = target.encrypted;
+        meta.teammate = target.teammate;
+        meta.name = target.name;
+        targets_out.push_back(std::move(meta));
+    }
+    horizontal_fov_out = horizontal_fov_radians_;
 
     state_ = State::Live;
     status_ = Joined("En vivo · ", targets_.size()) + " objetivos";
